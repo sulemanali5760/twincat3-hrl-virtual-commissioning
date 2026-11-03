@@ -100,7 +100,7 @@ in about a second.
 
 1. Install TcUnit once (download `TcUnit.library` from the [releases page](https://github.com/tcunit/TcUnit/releases), then *PLC → Library Repository → Install*).
 2. Open `TcProject/HrlRbg.sln` in TwinCAT XAE, platform *TwinCAT RT (x64)*.
-3. Build, *Activate Configuration*, Run. `PRG_TEST` runs after `MAIN`; results appear in the Error List after about a second (TcUnit also writes `C:\tcunit_xunit_testresults.xml`).
+3. Build, *Activate Configuration*, Run. `PRG_TEST` runs after `MAIN`; results appear in the Error List after about a second.
 4. Watch the plant: `MAIN.fbPlant.fbSrm` (positions, jobs), `MAIN.fbEmulator` (stored / retrieved), `MAIN.fbPlant.fbRack`.
 
 Built against TwinCAT 3.1.4026.
