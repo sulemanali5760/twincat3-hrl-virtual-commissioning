@@ -11,6 +11,26 @@ It is built on my [node-tree framework](https://github.com/sulemanali5760/twinca
 everything, devices expose commands that return `eBusy / eDone / eError`, and
 sequences are a `CASE` over a step manager. The framework is copied unchanged.
 
+### ▶ [Watch the plant run in your browser](https://sulemanali5760.github.io/twincat3-hrl-virtual-commissioning/)
+
+No TwinCAT needed. The page is a JavaScript port of the same logic: the RBG
+stores and retrieves pallets, the telegram log shows every order and answer,
+and buttons send the faulty telegrams from the interface test or fail the
+travel drive mid-job. (Source: `docs/index.html`.)
+
+## What happens, in plain words
+
+1. A pallet arrives on the **in-feed** conveyor and passes the **I-point** (contour and barcode check). It stops on the **transfer station** in front of the aisle.
+2. The **material flow computer** (here an emulator) sends a transport order `TORD`: *take LE0042 from the station to place L-07-3*.
+3. The PLC checks the order **before anything moves**: sequence number, duplicate order, valid places, RBG free, source holds exactly that pallet, target empty. If one check fails it answers `TERR` with a status code. If all pass it answers `TACK` and starts the RBG.
+4. The **RBG** runs its single cycle: travel and hoist to the station together, fork out, lift, fork in, travel to the place still lifted, fork out, lower, fork in. The rack books the pallet out at "lift" and in at "lower", so the PLC always knows where every pallet is.
+5. When the fork is back in the middle, the PLC reports `TDON`. The material flow computer must acknowledge with `TACK` within 5 s, otherwise the PLC raises status 30.
+6. After every third store, the emulator orders the oldest pallet back out. The station is held free for it, the RBG brings the pallet to the station, and the out-feed takes it away.
+
+Every axis simulates itself with a real speed/acceleration profile, so the times
+are realistic: one store or retrieval takes about 25–40 s, a FEM 9.851 double
+cycle about 52 s.
+
 ## The plant
 
 ```

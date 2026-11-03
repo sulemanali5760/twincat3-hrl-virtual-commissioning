@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>HRL Virtual Commissioning</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a control-room page — plant view on top, live state beside it, the explainer below like a commissioning manual. */
+:root{
+  --bg:#eef1f4; --panel:#ffffff; --ink:#18212b; --muted:#5b6876; --line:#cfd6de;
+  --steel:#3d5a73; --rack:#9aa9b8; --pallet:#c08a3e; --pallet-out:#5f8f6a; --amber:#d99a0b; --fault:#c2412d; --ok:#2f7d4f;
+  --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#121820; --panel:#1a232d; --ink:#e3e9ef; --muted:#93a2b1; --line:#2c3a48;
+  --steel:#8fb0cc; --rack:#4f6275; --pallet:#d49a4a; --pallet-out:#74b083; --amber:#f0b429; --fault:#e5654f; --ok:#5cba82; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121820; --panel:#1a232d; --ink:#e3e9ef; --muted:#93a2b1; --line:#2c3a48;
+  --steel:#8fb0cc; --rack:#4f6275; --pallet:#d49a4a; --pallet-out:#74b083; --amber:#f0b429; --fault:#e5654f; --ok:#5cba82; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 var(--body);padding-block:20px 48px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1180px;margin:0 auto;display:grid;gap:20px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 24px}
+h1{font:600 clamp(28px,4.4vw,44px)/1.05 var(--display);letter-spacing:.01em;margin:0;text-wrap:balance}
+.sub{color:var(--muted);margin:4px 0 0;max-width:62ch}
+.tag{font:500 12px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+a{color:var(--steel)}
+.plant{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px}
+@media (max-width:900px){.plant{grid-template-columns:1fr}}
+.view{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px;min-width:0}
+canvas{display:block;width:100%;height:auto;max-width:100%}
+.controls{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center}
+button,select{font:500 13px var(--body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:6px 10px;cursor:pointer}
+button:hover{border-color:var(--steel)}
+button:focus-visible,select:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+button.warn{border-color:var(--fault);color:var(--fault)}
+.sep{width:1px;height:22px;background:var(--line)}
+.side{display:grid;gap:12px;align-content:start;min-width:0}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px 14px;min-width:0}
+.box h2{font:600 15px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px}
+.kpi b{display:block;font:500 20px var(--mono);font-variant-numeric:tabular-nums}
+.kpi span{font-size:12px;color:var(--muted)}
+ol.steps{margin:0;padding-left:22px;font-size:13px;display:grid;gap:2px}
+ol.steps li{color:var(--muted)}
+ol.steps li.on{color:var(--ink);font-weight:600}
+ol.steps li.on::marker{color:var(--amber)}
+.state{display:inline-block;font:500 12px var(--mono);padding:2px 8px;border-radius:3px;border:1px solid var(--line);margin-bottom:8px}
+.state.run{color:var(--ok);border-color:var(--ok)} .state.fault{color:var(--fault);border-color:var(--fault)} .state.idle{color:var(--muted)}
+.log{font:12px/1.5 var(--mono);display:grid;gap:2px;max-height:210px;overflow:auto;font-variant-numeric:tabular-nums}
+.log div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.log .in{color:var(--steel)} .log .out{color:var(--ink)} .log .err{color:var(--fault)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--muted);margin-top:8px}
+.legend i{display:inline-block;width:12px;height:9px;margin-right:5px;vertical-align:-1px;border-radius:1px}
+.doc{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:20px clamp(16px,3vw,32px);display:grid;gap:18px}
+.doc section{display:grid;gap:8px;max-width:72ch}
+.doc h2{font:600 24px/1.15 var(--display);margin:0;letter-spacing:.01em}
+.doc p{margin:0}
+.doc ol,.doc ul{margin:0;padding-left:22px;display:grid;gap:4px}
+code{font:13px var(--mono);background:var(--bg);padding:1px 4px;border-radius:3px}
+pre{font:13px/1.5 var(--mono);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:10px 12px;margin:0;overflow-x:auto}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;font-size:14px;min-width:420px}
+th,td{text-align:left;padding:5px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font:600 12px var(--body);text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+td.n{font-family:var(--mono);font-variant-numeric:tabular-nums}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="tag">TwinCAT 3 · Structured Text · simulated plant</div>
+      <h1>HRL Virtual Commissioning</h1>
+      <p class="sub">A pallet high-bay warehouse with one storage and retrieval machine, run by the same logic as the PLC program: axis profiles, the eight-step single cycle, and telegram checks against an emulated material flow computer.</p>
+    </div>
+    <a href="https://github.com/sulemanali5760/twincat3-hrl-virtual-commissioning">Source on GitHub</a>
+  </header>
+
+  <div class="plant">
+    <div class="view">
+      <canvas id="cv" width="1200" height="520" aria-label="Rack elevation with the storage and retrieval machine"></canvas>
+      <div class="legend">
+        <span><i style="background:var(--pallet)"></i>stored pallet</span>
+        <span><i style="background:var(--pallet-out)"></i>pallet being retrieved</span>
+        <span><i style="background:var(--amber)"></i>job target</span>
+        <span>Each place shows left | right side of the aisle. Column 0 is the transfer station.</span>
+      </div>
+      <div class="controls">
+        <button id="btnRun" type="button">Pause</button>
+        <label class="tag" for="speed">Speed</label>
+        <select id="speed"><option value="1">1×</option><option value="4" selected>4×</option><option value="12">12×</option><option value="40">40×</option></select>
+        <span class="sep"></span>
+        <button id="btnDup" type="button">Send duplicate order</button>
+        <button id="btnOcc" type="button">Order into occupied place</button>
+        <button id="btnSeq" type="button">Wrong sequence no.</button>
+        <span class="sep"></span>
+        <button id="btnFault" type="button" class="warn">Travel drive fault</button>
+        <button id="btnReset" type="button">Reset fault</button>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="box">
+        <h2>RBG01</h2>
+        <span id="srmState" class="state idle">IDLE</span>
+        <ol class="steps" id="steps" start="0">
+          <li>Travel + hoist to source</li><li>Fork out</li><li>Lift pallet</li><li>Fork in</li>
+          <li>Travel + hoist to target</li><li>Fork out</li><li>Lower pallet</li><li>Fork in, job done</li>
+        </ol>
+      </div>
+      <div class="box">
+        <h2>Counters</h2>
+        <div class="kpis">
+          <div class="kpi"><b id="kStored">0</b><span>stored</span></div>
+          <div class="kpi"><b id="kRetr">0</b><span>retrieved</span></div>
+          <div class="kpi"><b id="kJob">–</b><span>last job [s]</span></div>
+          <div class="kpi"><b id="kTime">0</b><span>plant time [min]</span></div>
+          <div class="kpi"><b id="kPos">0.00</b><span>travel x [m]</span></div>
+          <div class="kpi"><b id="kHoist">0.50</b><span>hoist y [m]</span></div>
+        </div>
+      </div>
+      <div class="box">
+        <h2>Telegrams MFR ⇄ PLC</h2>
+        <div class="log" id="log" aria-live="polite"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="doc">
+    <section>
+      <h2>What you are watching</h2>
+      <p>New pallets arrive on the in-feed, pass the I-point and wait on the transfer station. The emulated material flow computer orders each one into the nearest free place. After every third store it orders the oldest pallet back out, so stores and retrievals alternate like in a real warehouse. Retrieved pallets leave over the out-feed.</p>
+      <p>The buttons on the left send the faulty telegrams from the interface test, or fail the travel drive mid-job. Watch the PLC answer in the telegram log.</p>
+    </section>
+    <section>
+      <h2>How the PLC program is built</h2>
+      <p>The plant is a tree of nodes. One <code>Cyclic()</code> call on the root runs every node, and each device returns <code>eBusy</code>, <code>eDone</code> or <code>eError</code> to the sequence that commands it.</p>
+<pre>FB_Hrl                    root mode node
+├─ FB_Srm  RBG01          single-cycle sequence
+│  ├─ FB_Axis  Travel     simulated trapezoid profile, laser value
+│  ├─ FB_Axis  Hoist
+│  └─ FB_Axis  Fork
+├─ FB_ConveyorZone  Infeed    one standard block,
+└─ FB_ConveyorZone  Outfeed   different parameters
+FB_Rack           which place holds which pallet, teach-in
+FB_MfrInterface   checks every telegram before anything moves</pre>
+    </section>
+    <section>
+      <h2>One RBG job, step by step</h2>
+      <ol start="0">
+        <li>Travel and hoist drive to the source together. The move takes as long as the slower axis.</li>
+        <li>The telescopic fork extends 1.10 m into the place (left side negative, right side positive).</li>
+        <li>The hoist lifts 0.10 m. The pallet is booked off the source place at this moment.</li>
+        <li>The fork retracts with the pallet.</li>
+        <li>Travel and hoist drive to the target, still lifted.</li>
+        <li>The fork extends into the target place.</li>
+        <li>The hoist lowers. The pallet is booked into the target place at this moment.</li>
+        <li>The fork retracts. The PLC reports TDON to the material flow computer.</li>
+      </ol>
+    </section>
+    <section>
+      <h2>Every telegram is checked first</h2>
+      <p>A transport order only starts the RBG if every check passes. Otherwise the PLC answers TERR with a status code and nothing moves.</p>
+      <div class="tbl"><table>
+        <thead><tr><th>Check</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Sequence number is the expected next one</td><td class="n">40</td></tr>
+          <tr><td>Order number is not active or just finished</td><td class="n">41</td></tr>
+          <tr><td>Source and target exist</td><td class="n">42</td></tr>
+          <tr><td>RBG is free and not faulted</td><td class="n">43</td></tr>
+          <tr><td>Source place holds a pallet</td><td class="n">11</td></tr>
+          <tr><td>Target place is free</td><td class="n">10</td></tr>
+          <tr><td>The pallet at the source is the ordered one</td><td class="n">44</td></tr>
+          <tr><td>TDON acknowledged within 5 s</td><td class="n">30</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+    <section>
+      <h2>The throughput proof</h2>
+      <p>FEM 9.851 measures an RBG by its double cycle: store at P1 (1/5 of the rack length, 2/3 of its height), travel empty to P2 (2/3 length, 1/5 height), retrieve there, return to the station. With travel 3.0 m/s, hoist 1.5 m/s and a 1.10 m fork, the calculation gives <strong>52.4 s, about 69 double cycles per hour</strong>. A unit test runs the same two jobs on the simulated RBG and requires the measured time to stay within 5 % of that figure.</p>
+    </section>
+    <section>
+      <h2>What this is not</h2>
+      <p>Everything here is simulated: axes, light barriers and the material flow computer. The PROFINET network, the safety program and the HMI belong to the real plant and are not part of this model. This page is a JavaScript port of the PLC logic for viewing. The TwinCAT project in the repository is the actual program, with 37 TcUnit tests.</p>
+    </section>
+  </div>
+</div>
+
+<script>
+(() => {
+const G = {cols:20, lvls:8, px:1.4, py:1.3, ox:2.0, oy:0.5, fork:1.1, lift:0.1};
+const DT = 0.01, STATION = {s:1,c:0,l:1};
+const key = a => a.s+','+a.c+','+a.l;
+const isStation = a => a.c===0 && a.l===1 && a.s===1;
+const valid = a => isStation(a) || (a.s>=1&&a.s<=2&&a.c>=1&&a.c<=G.cols&&a.l>=1&&a.l<=G.lvls);
+const nomX = a => isStation(a) ? 0 : G.ox + (a.c-1)*G.px;
+const nomY = a => G.oy + (a.l-1)*G.py;
+const BUSY=0, DONE=1, ERR=2;
+
+class Axis {            // same profile as FB_Axis
+  constructor(v,a){this.v=v;this.a=a;this.pos=0;this.vel=0;this.tgt=0;this.inPos=true;this.err=false;this.fault=false;this.tol=0.002}
+  move(p){ if(Math.abs(p-this.tgt)>1e-9){this.tgt=p;this.inPos=Math.abs(this.pos-p)<=this.tol}
+           return this.err?ERR:(this.inPos?DONE:BUSY) }
+  reset(){this.err=false;this.vel=0;this.tgt=this.pos;this.inPos=true}
+  tick(){
+    if(this.fault){this.vel=0;if(!this.inPos)this.err=true;return}
+    if(this.inPos||this.err){this.vel=0;return}
+    const d=this.tgt-this.pos, dir=d>=0?1:-1;
+    const vmax=Math.min(this.v,Math.sqrt(2*this.a*Math.max(Math.abs(d)-Math.abs(this.vel)*DT,0)));
+    this.vel = this.vel<dir*vmax ? Math.min(this.vel+this.a*DT,dir*vmax) : Math.max(this.vel-this.a*DT,dir*vmax);
+    const st=this.vel*DT;
+    if(Math.abs(d-st)<=this.tol/2 || dir*(d-st)<0){this.pos=this.tgt;this.vel=0;this.inPos=true} else this.pos+=st;
+  }
+}
+
+const rack = new Map();             // key -> pallet id
+const occ = a => rack.has(key(a));
+const put = (a,id) => { if(!valid(a)||occ(a)||!id) return false; rack.set(key(a),id); return true };
+const take = a => { const id=rack.get(key(a))||''; rack.delete(key(a)); return id };
+function findFree(){ for(let c=1;c<=G.cols;c++) for(let l=1;l<=G.lvls;l++) for(let s=1;s<=2;s++){const a={s,c,l}; if(!occ(a)) return a} return null }
+
+const srm = {x:new Axis(3.0,0.6), y:new Axis(1.5,0.8), z:new Axis(0.6,0.6), step:-1, src:null, dst:null,
+  pending:false, done:false, fault:false, onFork:'', jobT:0, lastT:null, jobs:0};
+srm.y.pos=srm.y.tgt=G.oy;
+function startJob(a,b){
+  if(srm.pending||srm.fault||!valid(a)||!valid(b)||!occ(a)||occ(b)) return false;
+  Object.assign(srm,{src:a,dst:b,pending:true,done:false,step:0,jobT:0}); return true }
+function moveXY(x,y){const ex=srm.x.move(x), ey=srm.y.move(y); return (ex===ERR||ey===ERR)?ERR:(ex===DONE&&ey===DONE?DONE:BUSY)}
+const forkPos = a => a.s===2 ? G.fork : -G.fork;
+function srmTick(){
+  if(srm.pending && !srm.fault){
+    srm.jobT+=DT;
+    const s=srm.src, d=srm.dst; let r;
+    switch(srm.step){
+      case 0: r=moveXY(nomX(s),nomY(s)); break;
+      case 1: r=srm.z.move(forkPos(s)); break;
+      case 2: r=srm.y.move(nomY(s)+G.lift); if(r===DONE) srm.onFork=take(s); break;
+      case 3: r=srm.z.move(0); break;
+      case 4: r=moveXY(nomX(d),nomY(d)+G.lift); break;
+      case 5: r=srm.z.move(forkPos(d)); break;
+      case 6: r=srm.y.move(nomY(d)); if(r===DONE){put(d,srm.onFork); srm.onFork=''} break;
+      case 7: r=srm.z.move(0); if(r===DONE){srm.pending=false;srm.done=true;srm.jobs++;srm.lastT=srm.jobT} break;
+    }
+    if(r===DONE && srm.pending) srm.step++;
+    if(r===ERR) srm.fault=true;
+  }
+  srm.x.tick(); srm.y.tick(); srm.z.tick();
+}
+
+// ---- MFR interface (PLC side), same checks and order as FB_MfrInterface
+const mfr = {expSeq:1, sendSeq:0, active:0, last:0, awaitAck:false, ackWait:0};
+const logEl=document.getElementById('log'); const lines=[];
+function log(cls,txt){ lines.unshift([cls,txt]); if(lines.length>40) lines.pop(); logEl.innerHTML=lines.map(([c,t])=>`<div class="${c}">${t}</div>`).join('') }
+const fmtA = a => isStation(a) ? 'STATION' : `${a.s===1?'L':'R'}-${String(a.c).padStart(2,'0')}-${a.l}`;
+function reply(type,t,st){ mfr.sendSeq++; log(st?'err':'out', `PLC → ${type} #${mfr.sendSeq} ord ${t.order}${st?'  status '+st:''}`); return {type,status:st} }
+function receive(t){
+  log('in', `MFR → ${t.type} #${t.seq} ord ${t.order}${t.type==='TORD'?' '+t.le+' '+fmtA(t.src)+'→'+fmtA(t.dst):''}`);
+  if(t.seq!==mfr.expSeq) return reply('TERR',t,40);
+  mfr.expSeq++;
+  if(t.type==='TACK'){ if(mfr.awaitAck && t.order===mfr.last){mfr.awaitAck=false;mfr.ackWait=0} return {type:'none'} }
+  if(t.order===mfr.active||t.order===mfr.last) return reply('TERR',t,41);
+  if(!valid(t.src)||!valid(t.dst)) return reply('TERR',t,42);
+  if(mfr.active!==0||srm.pending||srm.fault) return reply('TERR',t,43);
+  if(!occ(t.src)) return reply('TERR',t,11);
+  if(occ(t.dst)) return reply('TERR',t,10);
+  if(rack.get(key(t.src))!==t.le) return reply('TERR',t,44);
+  if(startJob(t.src,t.dst)){ mfr.active=t.order; return reply('TACK',t,0) }
+  return reply('TERR',t,43);
+}
+let outbox=null;
+function mfrTick(){
+  if(mfr.active){
+    if(srm.done){ mfr.sendSeq++; outbox={type:'TDON',order:mfr.active}; log('out',`PLC → TDON #${mfr.sendSeq} ord ${mfr.active}`);
+      mfr.last=mfr.active; mfr.active=0; mfr.awaitAck=true; mfr.ackWait=0 }
+    else if(srm.fault){ mfr.sendSeq++; log('err',`PLC → TERR #${mfr.sendSeq} ord ${mfr.active}  status 50`); mfr.last=mfr.active; mfr.active=0 }
+  }
+  if(mfr.awaitAck){ mfr.ackWait+=DT; if(mfr.ackWait>5){mfr.awaitAck=false; log('err','PLC: TDON not acknowledged  status 30')} }
+}
+
+// ---- conveyors + emulated material flow computer (as FB_MfrEmulator)
+const zone = len => ({len, pos:0, id:'', state:'empty'});
+const inf=zone(1.6), outf=zone(2.4); const SPEED=0.2;
+let stationOut=false, stationRes=false, nextLe=1;   // outbound pallet on the station / station held free for a retrieval
+const emu = {seq:0, order:0, fifo:[], sinceRetr:0, retrieving:false};
+function zoneTick(z){
+  if(z.state==='recv'){ z.pos+=SPEED*DT; if(z.pos>=z.len) z.state='full' }
+  else if(z.state==='deliver'){ z.pos+=SPEED*DT; if(z.pos>=z.len+1.2){ z.state='empty'; z.id=''; z.pos=0 } }
+}
+function plantTick(){
+  // in-feed -> station (station reserved while a retrieval is under way)
+  if(inf.state==='full' && !occ(STATION) && !stationOut && !stationRes){ inf.state='deliver'; inf.moving=inf.id }
+  if(inf.state==='empty' && inf.moving){ put(STATION,inf.moving); inf.moving='' }
+  if(stationOut && occ(STATION) && outf.state==='empty'){ outf.id=take(STATION); outf.state='recv'; outf.pos=0; stationOut=false; stationRes=false }
+  if(outf.state==='full') outf.state='deliver';
+  zoneTick(inf); zoneTick(outf);
+}
+const mfrSend = t => { emu.seq++; t.seq=emu.seq; return receive(t) };
+function emuTick(){
+  if(outbox){ const o=outbox; outbox=null; mfrSend({type:'TACK',order:o.order});
+    if(emu.retrieving){ stats.retr++; emu.retrieving=false } }
+  if(inf.state==='empty' && !inf.moving){ inf.id='LE'+String(nextLe++).padStart(4,'0'); inf.state='recv'; inf.pos=0 }
+  if(mfr.active||mfr.awaitAck||srm.pending||srm.fault) return;
+  if(emu.sinceRetr>=3 && emu.fifo.length && !emu.retrieving && !occ(STATION)){
+    const a=emu.fifo[0]; emu.order++;
+    const r=mfrSend({type:'TORD',order:emu.order,le:rack.get(key(a)),src:a,dst:STATION});
+    if(r.type==='TACK'){ emu.fifo.shift(); emu.retrieving=true; emu.sinceRetr=0; stationOut=true }
+  } else if(occ(STATION) && !stationOut){
+    const f=findFree(); if(!f) return; emu.order++;
+    const r=mfrSend({type:'TORD',order:emu.order,le:rack.get(key(STATION)),src:STATION,dst:f});
+    if(r.type==='TACK'){ emu.fifo.push(f); stats.stored++; emu.sinceRetr++;
+      if(emu.sinceRetr>=3) stationRes=true }   // hold the station free now, or the in-feed refills it
+  }
+}
+
+// ---- seed: a running plant, not an empty one (example pallets)
+const stats={stored:0, retr:0, t:0};
+[[1,1,1],[2,1,1],[1,1,2],[2,1,2],[1,2,1],[2,2,1],[1,1,3],[2,1,3],[1,2,2],[2,2,2],[1,3,1],[2,3,1]].forEach(([s,c,l],i)=>{
+  const a={s,c,l}; put(a,'LE'+String(9001+i)); emu.fifo.push(a) });
+
+// ---- manual interface test buttons
+document.getElementById('btnDup').onclick=()=>{ if(!mfr.last&&!mfr.active){log('err','No order yet to duplicate');return}
+  mfrSend({type:'TORD',order:mfr.active||mfr.last,le:'LE0000',src:STATION,dst:{s:1,c:20,l:8}}) };
+document.getElementById('btnOcc').onclick=()=>{ const tgt=emu.fifo[emu.fifo.length-1]||{s:1,c:1,l:1}; emu.order++;
+  mfrSend({type:'TORD',order:emu.order,le:rack.get(key(STATION))||'LE0000',src:STATION,dst:tgt}) };
+document.getElementById('btnSeq').onclick=()=>{ receive({type:'TORD',seq:emu.seq+7,order:++emu.order,le:'LE0000',src:STATION,dst:{s:2,c:20,l:8}}) };
+document.getElementById('btnFault').onclick=()=>{ srm.x.fault=true; log('err','Travel drive reports a fault') };
+document.getElementById('btnReset').onclick=()=>{ srm.x.fault=false; [srm.x,srm.y,srm.z].forEach(a=>a.reset());
+  if(srm.fault){ log('out','Fault reset, RBG stopped where it was'); srm.fault=false; srm.pending=false; srm.step=-1;
+    if(srm.onFork){ // put the pallet back where it came from, as an operator would after a fault
+      put(srm.src,srm.onFork); srm.onFork='' }
+    if(emu.retrieving) emu.fifo.unshift(srm.src);   // that pallet is still due to leave
+    emu.retrieving=false; stationOut=false; stationRes=false } };
+
+// ---- drawing
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const W=cv.width, H=cv.height, L=G.ox+(G.cols-1)*G.px+1.2, TOP=G.oy+(G.lvls-1)*G.py+1.3;
+const mx=70, my=30, sx=(W-mx-24)/(L+1.2), sy=(H-my-70)/TOP;
+const X=x=>mx+(x+0.6)*sx, Y=y=>H-70-y*sy;
+function draw(){
+  const ink=css('--ink'), muted=css('--muted'), line=css('--line'), rk=css('--rack'), pal=css('--pallet'), palOut=css('--pallet-out'),
+        amber=css('--amber'), steel=css('--steel'), fault=css('--fault'), bg=css('--panel');
+  ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+  ctx.font='12px "IBM Plex Mono", monospace'; ctx.fillStyle=muted; ctx.textAlign='right';
+  for(let l=1;l<=G.lvls;l++) ctx.fillText('L'+l, mx-10, Y(nomY({c:1,l}))+4);
+  ctx.textAlign='center';
+  for(let c=1;c<=G.cols;c+=c<2?1:(c<4?2:4)) ctx.fillText(c, X(nomX({c,l:1})), H-48);
+  ctx.fillText('St', X(0), H-48);
+  // rack places: each cell split left | right
+  const cw=G.px*sx*0.84, ch=G.py*sy*0.62;
+  for(let c=1;c<=G.cols;c++) for(let l=1;l<=G.lvls;l++){
+    const cx=X(nomX({c,l})), cy=Y(nomY({c,l}));
+    for(let s=1;s<=2;s++){
+      const a={s,c,l}, x0=cx-cw/2+(s-1)*cw/2+1, w=cw/2-2;
+      const isTgt=srm.pending&&srm.dst&&key(srm.dst)===key(a), isSrc=srm.pending&&srm.src&&key(srm.src)===key(a);
+      ctx.strokeStyle=rk; ctx.lineWidth=1; ctx.strokeRect(x0, cy-ch, w, ch);
+      if(occ(a)){ ctx.fillStyle=isSrc&&emu.retrieving?palOut:pal; ctx.fillRect(x0+2, cy-ch+3, w-4, ch-5) }
+      if(isTgt){ ctx.strokeStyle=amber; ctx.lineWidth=2; ctx.strokeRect(x0-1, cy-ch-1, w+2, ch+2) }
+    }
+  }
+  // rail and ground line
+  ctx.strokeStyle=line; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(X(-0.6),H-62); ctx.lineTo(X(L),H-62); ctx.stroke();
+  // station + conveyors
+  const sy0=Y(G.oy);
+  ctx.strokeStyle=steel; ctx.lineWidth=1.5; ctx.strokeRect(X(0)-cw/4, sy0-ch, cw/2, ch);
+  if(occ(STATION)){ ctx.fillStyle=stationOut?palOut:pal; ctx.fillRect(X(0)-cw/4+2, sy0-ch+3, cw/2-4, ch-5) }
+  ctx.fillStyle=muted; ctx.font='11px "IBM Plex Sans", sans-serif'; ctx.textAlign='left';
+  ctx.fillText('in-feed', 6, H-26); ctx.fillText('out-feed', 6, H-8);
+  const conv=(z,yy,c)=>{ ctx.strokeStyle=line; ctx.beginPath(); ctx.moveTo(56,yy); ctx.lineTo(X(0)-cw/4-4,yy); ctx.stroke();
+    if(z.state!=='empty'){ const span=(X(0)-cw/4-4)-56, p=Math.min(z.pos/(z.len+1.2),1); ctx.fillStyle=c; ctx.fillRect(56+p*(span-22), yy-9, 22, 8) } };
+  conv(inf, H-30, pal); conv(outf, H-12, palOut);
+  // RBG: mast, carriage, fork indicator
+  const rx=X(srm.x.pos), ry=Y(srm.y.pos);
+  ctx.strokeStyle=srm.fault?fault:ink; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.moveTo(rx-8,H-62); ctx.lineTo(rx-8,Y(TOP-0.3)); ctx.stroke();
+  ctx.lineWidth=2; ctx.strokeRect(rx-cw/2+6, ry-ch-4, cw-12, ch+6);
+  if(srm.onFork){ ctx.fillStyle=pal; ctx.fillRect(rx-cw/2+10, ry-ch, cw-20, ch-3) }
+  const f=srm.z.pos/G.fork; ctx.fillStyle=amber; ctx.fillRect(rx-2+Math.min(f,0)*cw*0.45, ry+4, 4+Math.abs(f)*cw*0.45, 4);
+  ctx.fillStyle=muted; ctx.font='11px "IBM Plex Mono", monospace'; ctx.textAlign='center';
+  ctx.fillText(srm.pending?(fmtA(srm.src)+' → '+fmtA(srm.dst)):'', rx, Y(TOP-0.3)-6);
+}
+
+// ---- side panel
+const stepsEl=[...document.querySelectorAll('#steps li')], stEl=document.getElementById('srmState');
+const $=id=>document.getElementById(id);
+function panel(){
+  stepsEl.forEach((li,i)=>li.classList.toggle('on', srm.pending && srm.step===i));
+  stEl.className='state '+(srm.fault?'fault':srm.pending?'run':'idle');
+  stEl.textContent=srm.fault?'FAULT':srm.pending?'JOB '+mfr.active:'IDLE';
+  $('kStored').textContent=stats.stored; $('kRetr').textContent=stats.retr;
+  $('kJob').textContent=srm.lastT==null?'–':srm.lastT.toFixed(1);
+  $('kTime').textContent=(stats.t/60).toFixed(1);
+  $('kPos').textContent=srm.x.pos.toFixed(2); $('kHoist').textContent=srm.y.pos.toFixed(2);
+}
+
+// ---- loop
+let running=!matchMedia('(prefers-reduced-motion: reduce)').matches, last=0;
+const btnRun=$('btnRun'); btnRun.textContent=running?'Pause':'Run';
+btnRun.onclick=()=>{ running=!running; btnRun.textContent=running?'Pause':'Run' };
+function cycle(){ emuTick(); plantTick(); srmTick(); mfrTick(); stats.t+=DT; if(srm.done && !srm.pending && !mfr.active) srm.done=false }
+function frame(ts){
+  const dt=Math.min((ts-last)/1000,0.1); last=ts;
+  if(running){ const n=Math.round(dt*+$('speed').value/DT); for(let i=0;i<n;i++) cycle() }
+  draw(); panel(); requestAnimationFrame(frame);
+}
+for(let i=0;i<300;i++) cycle();   // start in a running state: first order already under way
+draw(); panel(); requestAnimationFrame(t=>{last=t; frame(t)});
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',draw);
+})();
+</script>
+
+</body>
+</html>
