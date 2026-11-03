@@ -1,0 +1,136 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_ConveyorZone_Test" Id="{90b67da9-b794-455b-9cde-2574b2f0be38}" SpecialFunc="None">
+    <Declaration><![CDATA[// Tests for FB_ConveyorZone, the standard conveyor block of the pre-zone.
+FUNCTION_BLOCK FB_ConveyorZone_Test EXTENDS TcUnit.FB_TestSuite
+VAR
+    fbZoneIn    : FB_ConveyorZone(ipParent := 0, sNodeName := 'ZoneIn');
+    fbZoneFull  : FB_ConveyorZone(ipParent := 0, sNodeName := 'ZoneFull');
+    fbZoneOut   : FB_ConveyorZone(ipParent := 0, sNodeName := 'ZoneOut');
+    fbZoneJam   : FB_ConveyorZone(ipParent := 0, sNodeName := 'ZoneJam');
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[Accept_RunsThePalletToTheEndLightBarrier();
+Accept_OnOccupiedZone_IsRefused();
+Deliver_EmptiesTheZoneWhenThePalletHasLeft();
+LightBarrierNeverReached_IsAJam();]]></ST>
+    </Implementation>
+    <Method Name="Accept_RunsThePalletToTheEndLightBarrier" Id="{bff07108-ceda-4817-ace4-adbe4760c1b4}">
+      <Declaration><![CDATA[METHOD PRIVATE Accept_RunsThePalletToTheEndLightBarrier
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    n : DINT;
+    lrTime : LREAL;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Accept_RunsThePalletToTheEndLightBarrier');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+AssertTrue(Condition := fbZoneIn.Accept('LE0001'), Message := 'an empty zone must accept a pallet');
+FOR n := 1 TO 5000 DO
+    fbZoneIn.Cyclic();
+    lrTime := lrTime + fbZoneIn.lrCycleTime;
+    IF fbZoneIn.eState = E_ZoneState.eOccupied THEN EXIT; END_IF
+END_FOR
+AssertTrue(Condition := fbZoneIn.eState = E_ZoneState.eOccupied, Message := 'pallet must stop at the end light barrier');
+AssertFalse(Condition := fbZoneIn.bMotorOn, Message := 'motor must be off when the pallet has arrived');
+AssertEquals_LREAL(Expected := 8.0, Actual := lrTime, Delta := 0.05, Message := '1.6 m at 0.2 m/s = 8 s');
+AssertEquals_STRING(Expected := 'LE0001', Actual := fbZoneIn.sLeId, Message := 'zone must know its pallet');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Accept_OnOccupiedZone_IsRefused" Id="{4afda704-ae85-46db-9c1b-936e78675398}">
+      <Declaration><![CDATA[METHOD PRIVATE Accept_OnOccupiedZone_IsRefused
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    n : DINT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Accept_OnOccupiedZone_IsRefused');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+fbZoneFull.Accept('LE0001');
+FOR n := 1 TO 5000 DO
+    fbZoneFull.Cyclic();
+END_FOR
+AssertFalse(Condition := fbZoneFull.Accept('LE0002'), Message := 'a zone holds one pallet only');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Deliver_EmptiesTheZoneWhenThePalletHasLeft" Id="{ceacdfa4-1ea9-45ce-8150-d9e8e1551bbf}">
+      <Declaration><![CDATA[METHOD PRIVATE Deliver_EmptiesTheZoneWhenThePalletHasLeft
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    n : DINT;
+    eResult : E_CmdResult;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Deliver_EmptiesTheZoneWhenThePalletHasLeft');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+fbZoneOut.Accept('LE0001');
+FOR n := 1 TO 5000 DO
+    fbZoneOut.Cyclic();
+END_FOR
+FOR n := 1 TO 5000 DO
+    eResult := fbZoneOut.Deliver();
+    IF eResult <> E_CmdResult.eBusy THEN EXIT; END_IF
+    fbZoneOut.Cyclic();
+END_FOR
+AssertTrue(Condition := eResult = E_CmdResult.eDone, Message := 'deliver must end with eDone');
+AssertTrue(Condition := fbZoneOut.eState = E_ZoneState.eEmpty, Message := 'zone must be empty after delivering');
+AssertEquals_STRING(Expected := '', Actual := fbZoneOut.sLeId, Message := 'zone must forget the pallet');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="LightBarrierNeverReached_IsAJam" Id="{ab9807f0-5501-41a7-bf47-a97c82fd395f}">
+      <Declaration><![CDATA[METHOD PRIVATE LightBarrierNeverReached_IsAJam
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    n : DINT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('LightBarrierNeverReached_IsAJam');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+fbZoneJam.bSimulate    := FALSE;   // real sensor that never switches
+fbZoneJam.lrJamTimeout := 5.0;
+fbZoneJam.Accept('LE0001');
+FOR n := 1 TO 600 DO
+    fbZoneJam.Cyclic();
+END_FOR
+AssertTrue(Condition := fbZoneJam.eState = E_ZoneState.eFault, Message := 'no light barrier after the jam time must be a fault');
+AssertFalse(Condition := fbZoneJam.bMotorOn, Message := 'motor must stop on a jam');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,202 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_Rack_Test" Id="{36187fc6-76ad-4e79-bf3b-73bedec8d9ba}" SpecialFunc="None">
+    <Declaration><![CDATA[// Tests for FB_Rack: place geometry, teach-in, booking pallets in and out.
+// Every test gets its own rack so they cannot see each other's pallets.
+FUNCTION_BLOCK FB_Rack_Test EXTENDS TcUnit.FB_TestSuite
+VAR
+    fbRackGeo   : FB_Rack;
+    fbRackTeach : FB_Rack;
+    fbRackReject: FB_Rack;
+    fbRackBook  : FB_Rack;
+    fbRackTwice : FB_Rack;
+    fbRackBad   : FB_Rack;
+    fbRackFree  : FB_Rack;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[Geometry_PlaceAndStation_FollowTheDrawing();
+Teach_WithinTolerance_IsUsedAsTarget();
+Teach_OutOfTolerance_IsRejected();
+PutTake_BooksThePalletInAndOut();
+Put_OnOccupiedPlace_IsRefused();
+InvalidAddress_IsRejectedEverywhere();
+FindFree_SkipsOccupiedPlaces();]]></ST>
+    </Implementation>
+    <Method Name="Geometry_PlaceAndStation_FollowTheDrawing" Id="{1492470e-c87c-46fe-800e-2788db94ffba}">
+      <Declaration><![CDATA[METHOD PRIVATE Geometry_PlaceAndStation_FollowTheDrawing
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    stPlace   : ST_SlotAddr := (nSide := 2, nColumn := 5, nLevel := 3);
+    stStation : ST_SlotAddr := (nSide := 1, nColumn := 0, nLevel := 1);
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Geometry_PlaceAndStation_FollowTheDrawing');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+AssertEquals_LREAL(Expected := 7.6, Actual := fbRackGeo.NominalX(stPlace), Delta := 1.0E-9, Message := 'column 5 = offset 2.0 + 4 x 1.4 m');
+AssertEquals_LREAL(Expected := 3.1, Actual := fbRackGeo.NominalY(stPlace), Delta := 1.0E-9, Message := 'level 3 = offset 0.5 + 2 x 1.3 m');
+AssertEquals_LREAL(Expected := 0.0, Actual := fbRackGeo.NominalX(stStation), Delta := 1.0E-9, Message := 'transfer station is the travel zero');
+AssertTrue(Condition := fbRackGeo.IsStation(stStation), Message := 'column 0 / level 1 / side 1 is the station');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Teach_WithinTolerance_IsUsedAsTarget" Id="{fd9b24b9-f0a3-401f-9809-87a5f95ccda8}">
+      <Declaration><![CDATA[METHOD PRIVATE Teach_WithinTolerance_IsUsedAsTarget
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    stPlace : ST_SlotAddr := (nSide := 1, nColumn := 3, nLevel := 2);
+    lrX, lrY : LREAL;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Teach_WithinTolerance_IsUsedAsTarget');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+lrX := fbRackTeach.NominalX(stPlace) + 0.012;
+lrY := fbRackTeach.NominalY(stPlace) - 0.008;
+AssertTrue(Condition := fbRackTeach.Teach(stPlace, lrX, lrY), Message := '12 mm / 8 mm off the drawing must be accepted');
+AssertEquals_LREAL(Expected := lrX, Actual := fbRackTeach.TargetX(stPlace), Delta := 1.0E-9, Message := 'RBG must drive to the taught travel position');
+AssertEquals_LREAL(Expected := lrY, Actual := fbRackTeach.TargetY(stPlace), Delta := 1.0E-9, Message := 'RBG must drive to the taught hoist position');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Teach_OutOfTolerance_IsRejected" Id="{18a100ef-a2cb-408a-aff5-35c541e15b23}">
+      <Declaration><![CDATA[METHOD PRIVATE Teach_OutOfTolerance_IsRejected
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    stPlace : ST_SlotAddr := (nSide := 1, nColumn := 3, nLevel := 2);
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Teach_OutOfTolerance_IsRejected');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+AssertFalse(Condition := fbRackReject.Teach(stPlace, fbRackReject.NominalX(stPlace) + 0.035, fbRackReject.NominalY(stPlace)),
+            Message := '35 mm off the drawing means check the rack, not learn it');
+AssertEquals_LREAL(Expected := fbRackReject.NominalX(stPlace), Actual := fbRackReject.TargetX(stPlace), Delta := 1.0E-9,
+                   Message := 'a rejected teach must not change the target');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="PutTake_BooksThePalletInAndOut" Id="{62bf3d8a-e2ca-4946-ab93-a6f3f515533f}">
+      <Declaration><![CDATA[METHOD PRIVATE PutTake_BooksThePalletInAndOut
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    stPlace : ST_SlotAddr := (nSide := 1, nColumn := 1, nLevel := 1);
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('PutTake_BooksThePalletInAndOut');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+AssertTrue(Condition := fbRackBook.Put(stPlace, 'LE0001'), Message := 'empty place must accept a pallet');
+AssertTrue(Condition := fbRackBook.IsOccupied(stPlace), Message := 'place must be occupied after Put');
+AssertEquals_STRING(Expected := 'LE0001', Actual := fbRackBook.LeIdAt(stPlace), Message := 'place must know its load unit');
+AssertEquals_STRING(Expected := 'LE0001', Actual := fbRackBook.Take(stPlace), Message := 'Take must return the load unit');
+AssertFalse(Condition := fbRackBook.IsOccupied(stPlace), Message := 'place must be free after Take');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Put_OnOccupiedPlace_IsRefused" Id="{50c156bb-d663-4611-9da0-84a9fddfd799}">
+      <Declaration><![CDATA[METHOD PRIVATE Put_OnOccupiedPlace_IsRefused
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    stPlace : ST_SlotAddr := (nSide := 2, nColumn := 7, nLevel := 4);
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Put_OnOccupiedPlace_IsRefused');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+fbRackTwice.Put(stPlace, 'LE0001');
+AssertFalse(Condition := fbRackTwice.Put(stPlace, 'LE0002'), Message := 'two pallets must never be booked into one place');
+AssertEquals_STRING(Expected := 'LE0001', Actual := fbRackTwice.LeIdAt(stPlace), Message := 'first pallet must stay booked');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="InvalidAddress_IsRejectedEverywhere" Id="{ff052573-3c08-4838-a8dc-888793f8014f}">
+      <Declaration><![CDATA[METHOD PRIVATE InvalidAddress_IsRejectedEverywhere
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    stSide3 : ST_SlotAddr := (nSide := 3, nColumn := 1, nLevel := 1);
+    stCol21 : ST_SlotAddr := (nSide := 1, nColumn := 21, nLevel := 1);
+    stStationLevel2 : ST_SlotAddr := (nSide := 1, nColumn := 0, nLevel := 2);
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('InvalidAddress_IsRejectedEverywhere');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+AssertFalse(Condition := fbRackBad.IsValid(stSide3), Message := 'side 3 does not exist');
+AssertFalse(Condition := fbRackBad.IsValid(stCol21), Message := 'column 21 does not exist');
+AssertFalse(Condition := fbRackBad.IsValid(stStationLevel2), Message := 'the station has only level 1');
+AssertFalse(Condition := fbRackBad.Put(stCol21, 'LE0001'), Message := 'no booking into an invalid address');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="FindFree_SkipsOccupiedPlaces" Id="{f7430453-e09e-4464-b0da-47f96098e773}">
+      <Declaration><![CDATA[METHOD PRIVATE FindFree_SkipsOccupiedPlaces
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    stA : ST_SlotAddr := (nSide := 1, nColumn := 1, nLevel := 1);
+    stB : ST_SlotAddr := (nSide := 2, nColumn := 1, nLevel := 1);
+    stFound : ST_SlotAddr;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('FindFree_SkipsOccupiedPlaces');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+fbRackFree.Put(stA, 'LE0001');
+fbRackFree.Put(stB, 'LE0002');
+AssertTrue(Condition := fbRackFree.FindFree(stFound), Message := 'an almost empty rack has free places');
+AssertEquals_INT(Expected := 1, Actual := stFound.nColumn, Message := 'nearest column first');
+AssertEquals_INT(Expected := 2, Actual := stFound.nLevel, Message := 'level 1 is full on both sides -> level 2');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,21 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="PRG_TEST" Id="{17e4fb1f-58d8-44f7-b41c-ae9928353b43}" SpecialFunc="None">
+    <Declaration><![CDATA[// PRG_TEST - runs the unit tests with TcUnit. PlcTask calls it after MAIN; the
+// suites build their own instances and never touch MAIN's plant. Results land
+// in the Error List about a second after Run.
+PROGRAM PRG_TEST
+VAR
+    fbRackTest      : FB_Rack_Test;
+    fbAxisTest      : FB_Axis_Test;
+    fbConveyorTest  : FB_ConveyorZone_Test;
+    fbIPointTest    : FB_IPoint_Test;
+    fbMfrTest       : FB_MfrInterface_Test;
+    fbSrmTest       : FB_Srm_Test;
+    fbTravelTimeTest: FB_TravelTime_Test;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[TcUnit.RUN();]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

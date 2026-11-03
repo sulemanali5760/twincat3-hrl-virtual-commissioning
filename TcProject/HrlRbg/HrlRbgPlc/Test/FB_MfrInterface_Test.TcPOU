@@ -1,0 +1,406 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_MfrInterface_Test" Id="{1c0be4d1-233d-4688-8614-9b4aec43ddfa}" SpecialFunc="None">
+    <Declaration><![CDATA[// Tests for the telegram interface to the material flow computer: these are
+// the interface test cases of the commissioning (Schnittstellentest).
+FUNCTION_BLOCK FB_MfrInterface_Test EXTENDS TcUnit.FB_TestSuite
+VAR
+    fbRackOk : FB_Rack;
+    fbSrmOk  : FB_Srm(ipParent := 0, sNodeName := 'SrmOk');
+    fbMfrOk  : FB_MfrInterface;
+    fbRackSeq : FB_Rack;
+    fbSrmSeq  : FB_Srm(ipParent := 0, sNodeName := 'SrmSeq');
+    fbMfrSeq  : FB_MfrInterface;
+    fbRackDup : FB_Rack;
+    fbSrmDup  : FB_Srm(ipParent := 0, sNodeName := 'SrmDup');
+    fbMfrDup  : FB_MfrInterface;
+    fbRackOcc : FB_Rack;
+    fbSrmOcc  : FB_Srm(ipParent := 0, sNodeName := 'SrmOcc');
+    fbMfrOcc  : FB_MfrInterface;
+    fbRackEmpty : FB_Rack;
+    fbSrmEmpty  : FB_Srm(ipParent := 0, sNodeName := 'SrmEmpty');
+    fbMfrEmpty  : FB_MfrInterface;
+    fbRackLe : FB_Rack;
+    fbSrmLe  : FB_Srm(ipParent := 0, sNodeName := 'SrmLe');
+    fbMfrLe  : FB_MfrInterface;
+    fbRackAddr : FB_Rack;
+    fbSrmAddr  : FB_Srm(ipParent := 0, sNodeName := 'SrmAddr');
+    fbMfrAddr  : FB_MfrInterface;
+    fbRackBusy : FB_Rack;
+    fbSrmBusy  : FB_Srm(ipParent := 0, sNodeName := 'SrmBusy');
+    fbMfrBusy  : FB_MfrInterface;
+    fbRackDone : FB_Rack;
+    fbSrmDone  : FB_Srm(ipParent := 0, sNodeName := 'SrmDone');
+    fbMfrDone  : FB_MfrInterface;
+    fbRackAck : FB_Rack;
+    fbSrmAck  : FB_Srm(ipParent := 0, sNodeName := 'SrmAck');
+    fbMfrAck  : FB_MfrInterface;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[ValidOrder_IsAcknowledgedAndStarted();
+WrongSequenceNumber_IsRejected();
+DuplicateOrder_IsRejected();
+TargetOccupied_IsRejected();
+SourceEmpty_IsRejected();
+WrongLoadUnit_IsRejected();
+InvalidAddress_IsRejected();
+SecondOrderWhileBusy_IsRejected();
+FinishedJob_SendsTdon_AndMissingAckTimesOut();
+Tack_ClearsTheWaitForAcknowledge();]]></ST>
+    </Implementation>
+    <Method Name="ValidOrder_IsAcknowledgedAndStarted" Id="{764072f6-e49c-41c3-bc2a-8d0cafd6717b}">
+      <Declaration><![CDATA[METHOD PRIVATE ValidOrder_IsAcknowledgedAndStarted
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    stTel, stAns : ST_Telegram;
+    stStation : ST_SlotAddr := (nSide := 1, nColumn := 0, nLevel := 1);
+    stPlace : ST_SlotAddr := (nSide := 1, nColumn := 2, nLevel := 1);
+    stOther : ST_SlotAddr := (nSide := 2, nColumn := 6, nLevel := 3);
+    stBad   : ST_SlotAddr := (nSide := 1, nColumn := 30, nLevel := 1);
+    n : DINT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ValidOrder_IsAcknowledgedAndStarted');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+fbMfrOk.Init(fbRackOk, fbSrmOk);
+fbSrmOk.Init(fbRackOk);
+fbRackOk.Put(stStation, 'LE0001');
+stTel.sType := 'TORD'; stTel.nSeq := 1; stTel.nOrder := 1; stTel.sLeId := 'LE0001';
+stTel.stSource := stStation; stTel.stTarget := stPlace;
+stAns := fbMfrOk.Receive(stTel);
+AssertEquals_STRING(Expected := 'TACK', Actual := stAns.sType, Message := 'a valid order must be acknowledged');
+AssertEquals_INT(Expected := GVL_Mfr.cStatusOk, Actual := stAns.nStatus, Message := 'status OK');
+AssertEquals_DINT(Expected := 1, Actual := fbMfrOk.ActiveOrder, Message := 'order must be active');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="WrongSequenceNumber_IsRejected" Id="{f8f601fa-76f0-4ba8-a865-54f39aa0ec9c}">
+      <Declaration><![CDATA[METHOD PRIVATE WrongSequenceNumber_IsRejected
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    stTel, stAns : ST_Telegram;
+    stStation : ST_SlotAddr := (nSide := 1, nColumn := 0, nLevel := 1);
+    stPlace : ST_SlotAddr := (nSide := 1, nColumn := 2, nLevel := 1);
+    stOther : ST_SlotAddr := (nSide := 2, nColumn := 6, nLevel := 3);
+    stBad   : ST_SlotAddr := (nSide := 1, nColumn := 30, nLevel := 1);
+    n : DINT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('WrongSequenceNumber_IsRejected');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+fbMfrSeq.Init(fbRackSeq, fbSrmSeq);
+fbSrmSeq.Init(fbRackSeq);
+fbRackSeq.Put(stStation, 'LE0001');
+stTel.sType := 'TORD'; stTel.nSeq := 2; stTel.nOrder := 1; stTel.sLeId := 'LE0001';
+stTel.stSource := stStation; stTel.stTarget := stPlace;
+stAns := fbMfrSeq.Receive(stTel);
+AssertEquals_INT(Expected := GVL_Mfr.cWrongSequence, Actual := stAns.nStatus, Message := 'first telegram must carry seq 1');
+AssertEquals_DINT(Expected := 0, Actual := fbMfrSeq.ActiveOrder, Message := 'nothing may start');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="DuplicateOrder_IsRejected" Id="{bdc91a80-9e61-45d9-b3a9-e0070c82f4de}">
+      <Declaration><![CDATA[METHOD PRIVATE DuplicateOrder_IsRejected
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    stTel, stAns : ST_Telegram;
+    stStation : ST_SlotAddr := (nSide := 1, nColumn := 0, nLevel := 1);
+    stPlace : ST_SlotAddr := (nSide := 1, nColumn := 2, nLevel := 1);
+    stOther : ST_SlotAddr := (nSide := 2, nColumn := 6, nLevel := 3);
+    stBad   : ST_SlotAddr := (nSide := 1, nColumn := 30, nLevel := 1);
+    n : DINT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('DuplicateOrder_IsRejected');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+fbMfrDup.Init(fbRackDup, fbSrmDup);
+fbSrmDup.Init(fbRackDup);
+fbRackDup.Put(stStation, 'LE0001');
+stTel.sType := 'TORD'; stTel.nSeq := 1; stTel.nOrder := 7; stTel.sLeId := 'LE0001';
+stTel.stSource := stStation; stTel.stTarget := stPlace;
+fbMfrDup.Receive(stTel);
+stTel.nSeq := 2;
+stAns := fbMfrDup.Receive(stTel);
+AssertEquals_INT(Expected := GVL_Mfr.cDuplicateOrder, Actual := stAns.nStatus, Message := 'same order number twice must be rejected');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="TargetOccupied_IsRejected" Id="{0190ec93-5819-4bbd-abac-af43f7197428}">
+      <Declaration><![CDATA[METHOD PRIVATE TargetOccupied_IsRejected
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    stTel, stAns : ST_Telegram;
+    stStation : ST_SlotAddr := (nSide := 1, nColumn := 0, nLevel := 1);
+    stPlace : ST_SlotAddr := (nSide := 1, nColumn := 2, nLevel := 1);
+    stOther : ST_SlotAddr := (nSide := 2, nColumn := 6, nLevel := 3);
+    stBad   : ST_SlotAddr := (nSide := 1, nColumn := 30, nLevel := 1);
+    n : DINT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('TargetOccupied_IsRejected');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+fbMfrOcc.Init(fbRackOcc, fbSrmOcc);
+fbSrmOcc.Init(fbRackOcc);
+fbRackOcc.Put(stStation, 'LE0001');fbRackOcc.Put(stPlace, 'LE0099');
+stTel.sType := 'TORD'; stTel.nSeq := 1; stTel.nOrder := 1; stTel.sLeId := 'LE0001';
+stTel.stSource := stStation; stTel.stTarget := stPlace;
+stAns := fbMfrOcc.Receive(stTel);
+AssertEquals_INT(Expected := GVL_Mfr.cSlotOccupied, Actual := stAns.nStatus, Message := 'never store into an occupied place');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="SourceEmpty_IsRejected" Id="{b18bea59-1b32-4f26-9e63-38b38b01dd2d}">
+      <Declaration><![CDATA[METHOD PRIVATE SourceEmpty_IsRejected
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    stTel, stAns : ST_Telegram;
+    stStation : ST_SlotAddr := (nSide := 1, nColumn := 0, nLevel := 1);
+    stPlace : ST_SlotAddr := (nSide := 1, nColumn := 2, nLevel := 1);
+    stOther : ST_SlotAddr := (nSide := 2, nColumn := 6, nLevel := 3);
+    stBad   : ST_SlotAddr := (nSide := 1, nColumn := 30, nLevel := 1);
+    n : DINT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('SourceEmpty_IsRejected');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+fbMfrEmpty.Init(fbRackEmpty, fbSrmEmpty);
+fbSrmEmpty.Init(fbRackEmpty);
+fbRackEmpty.Put(stStation, 'LE0001');
+stTel.sType := 'TORD'; stTel.nSeq := 1; stTel.nOrder := 1; stTel.sLeId := 'LE0005';
+stTel.stSource := stOther; stTel.stTarget := stPlace;
+stAns := fbMfrEmpty.Receive(stTel);
+AssertEquals_INT(Expected := GVL_Mfr.cSlotEmpty, Actual := stAns.nStatus, Message := 'no pick from an empty place');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="WrongLoadUnit_IsRejected" Id="{34d98b0f-0861-4a33-9987-ce6fa14b4dc8}">
+      <Declaration><![CDATA[METHOD PRIVATE WrongLoadUnit_IsRejected
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    stTel, stAns : ST_Telegram;
+    stStation : ST_SlotAddr := (nSide := 1, nColumn := 0, nLevel := 1);
+    stPlace : ST_SlotAddr := (nSide := 1, nColumn := 2, nLevel := 1);
+    stOther : ST_SlotAddr := (nSide := 2, nColumn := 6, nLevel := 3);
+    stBad   : ST_SlotAddr := (nSide := 1, nColumn := 30, nLevel := 1);
+    n : DINT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('WrongLoadUnit_IsRejected');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+fbMfrLe.Init(fbRackLe, fbSrmLe);
+fbSrmLe.Init(fbRackLe);
+fbRackLe.Put(stStation, 'LE0001');
+stTel.sType := 'TORD'; stTel.nSeq := 1; stTel.nOrder := 1; stTel.sLeId := 'LE0042';
+stTel.stSource := stStation; stTel.stTarget := stPlace;
+stAns := fbMfrLe.Receive(stTel);
+AssertEquals_INT(Expected := GVL_Mfr.cLeMismatch, Actual := stAns.nStatus, Message := 'ordered pallet must be the one at the source');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="InvalidAddress_IsRejected" Id="{e2eb3dd9-a12b-4b8b-88b4-54f245109537}">
+      <Declaration><![CDATA[METHOD PRIVATE InvalidAddress_IsRejected
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    stTel, stAns : ST_Telegram;
+    stStation : ST_SlotAddr := (nSide := 1, nColumn := 0, nLevel := 1);
+    stPlace : ST_SlotAddr := (nSide := 1, nColumn := 2, nLevel := 1);
+    stOther : ST_SlotAddr := (nSide := 2, nColumn := 6, nLevel := 3);
+    stBad   : ST_SlotAddr := (nSide := 1, nColumn := 30, nLevel := 1);
+    n : DINT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('InvalidAddress_IsRejected');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+fbMfrAddr.Init(fbRackAddr, fbSrmAddr);
+fbSrmAddr.Init(fbRackAddr);
+fbRackAddr.Put(stStation, 'LE0001');
+stTel.sType := 'TORD'; stTel.nSeq := 1; stTel.nOrder := 1; stTel.sLeId := 'LE0001';
+stTel.stSource := stStation; stTel.stTarget := stBad;
+stAns := fbMfrAddr.Receive(stTel);
+AssertEquals_INT(Expected := GVL_Mfr.cInvalidAddress, Actual := stAns.nStatus, Message := 'column 30 does not exist');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="SecondOrderWhileBusy_IsRejected" Id="{1bd9e173-8547-4b69-b4ee-2c4fdb0a7d0e}">
+      <Declaration><![CDATA[METHOD PRIVATE SecondOrderWhileBusy_IsRejected
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    stTel, stAns : ST_Telegram;
+    stStation : ST_SlotAddr := (nSide := 1, nColumn := 0, nLevel := 1);
+    stPlace : ST_SlotAddr := (nSide := 1, nColumn := 2, nLevel := 1);
+    stOther : ST_SlotAddr := (nSide := 2, nColumn := 6, nLevel := 3);
+    stBad   : ST_SlotAddr := (nSide := 1, nColumn := 30, nLevel := 1);
+    n : DINT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('SecondOrderWhileBusy_IsRejected');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+fbMfrBusy.Init(fbRackBusy, fbSrmBusy);
+fbSrmBusy.Init(fbRackBusy);
+fbRackBusy.Put(stStation, 'LE0001');
+stTel.sType := 'TORD'; stTel.nSeq := 1; stTel.nOrder := 1; stTel.sLeId := 'LE0001';
+stTel.stSource := stStation; stTel.stTarget := stPlace;
+fbMfrBusy.Receive(stTel);
+fbRackBusy.Put(stOther, 'LE0002');
+stTel.nSeq := 2; stTel.nOrder := 2; stTel.sLeId := 'LE0002'; stTel.stSource := stOther;
+stTel.stTarget := stPlace;
+stTel.stTarget.nColumn := 9;   // free place (1,9,1)
+stAns := fbMfrBusy.Receive(stTel);
+AssertEquals_INT(Expected := GVL_Mfr.cSrmBusy, Actual := stAns.nStatus, Message := 'one order at a time');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="FinishedJob_SendsTdon_AndMissingAckTimesOut" Id="{d75f76d2-4926-476f-a635-085bd6152955}">
+      <Declaration><![CDATA[METHOD PRIVATE FinishedJob_SendsTdon_AndMissingAckTimesOut
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    stTel, stAns : ST_Telegram;
+    stStation : ST_SlotAddr := (nSide := 1, nColumn := 0, nLevel := 1);
+    stPlace : ST_SlotAddr := (nSide := 1, nColumn := 2, nLevel := 1);
+    stOther : ST_SlotAddr := (nSide := 2, nColumn := 6, nLevel := 3);
+    stBad   : ST_SlotAddr := (nSide := 1, nColumn := 30, nLevel := 1);
+    n : DINT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('FinishedJob_SendsTdon_AndMissingAckTimesOut');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+fbMfrDone.Init(fbRackDone, fbSrmDone);
+fbSrmDone.Init(fbRackDone);
+fbRackDone.Put(stStation, 'LE0001');
+stTel.sType := 'TORD'; stTel.nSeq := 1; stTel.nOrder := 1; stTel.sLeId := 'LE0001';
+stTel.stSource := stStation; stTel.stTarget := stPlace;
+fbSrmDone.SetMode(E_OpMode.eAutomatic);
+fbMfrDone.Receive(stTel);
+FOR n := 1 TO 30000 DO
+    fbSrmDone.Cyclic();
+    fbMfrDone.Cyclic();
+    IF fbMfrDone.nOutboxCount > 0 THEN EXIT; END_IF
+END_FOR
+AssertEquals_STRING(Expected := 'TDON', Actual := fbMfrDone.stOutbox.sType, Message := 'finished order must be reported with TDON');
+AssertEquals_DINT(Expected := 1, Actual := fbMfrDone.stOutbox.nOrder, Message := 'TDON must carry the order number');
+FOR n := 1 TO 600 DO   // 6 s without TACK
+    fbMfrDone.Cyclic();
+END_FOR
+AssertTrue(Condition := fbMfrDone.bAckTimeout, Message := 'missing TACK must time out');
+AssertEquals_INT(Expected := GVL_Mfr.cAckTimeout, Actual := fbMfrDone.nLastStatus, Message := 'status 30');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Tack_ClearsTheWaitForAcknowledge" Id="{487e970b-abf3-4491-ba05-8910e75fbc12}">
+      <Declaration><![CDATA[METHOD PRIVATE Tack_ClearsTheWaitForAcknowledge
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    stTel, stAns : ST_Telegram;
+    stStation : ST_SlotAddr := (nSide := 1, nColumn := 0, nLevel := 1);
+    stPlace : ST_SlotAddr := (nSide := 1, nColumn := 2, nLevel := 1);
+    stOther : ST_SlotAddr := (nSide := 2, nColumn := 6, nLevel := 3);
+    stBad   : ST_SlotAddr := (nSide := 1, nColumn := 30, nLevel := 1);
+    n : DINT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Tack_ClearsTheWaitForAcknowledge');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+fbMfrAck.Init(fbRackAck, fbSrmAck);
+fbSrmAck.Init(fbRackAck);
+fbRackAck.Put(stStation, 'LE0001');
+stTel.sType := 'TORD'; stTel.nSeq := 1; stTel.nOrder := 1; stTel.sLeId := 'LE0001';
+stTel.stSource := stStation; stTel.stTarget := stPlace;
+fbSrmAck.SetMode(E_OpMode.eAutomatic);
+fbMfrAck.Receive(stTel);
+FOR n := 1 TO 30000 DO
+    fbSrmAck.Cyclic();
+    fbMfrAck.Cyclic();
+    IF fbMfrAck.nOutboxCount > 0 THEN EXIT; END_IF
+END_FOR
+stTel.sType := 'TACK'; stTel.nSeq := 2; stTel.nOrder := 1;
+fbMfrAck.Receive(stTel);
+FOR n := 1 TO 600 DO
+    fbMfrAck.Cyclic();
+END_FOR
+AssertFalse(Condition := fbMfrAck.AwaitingAck, Message := 'TACK must end the wait');
+AssertFalse(Condition := fbMfrAck.bAckTimeout, Message := 'acknowledged TDON must not time out');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

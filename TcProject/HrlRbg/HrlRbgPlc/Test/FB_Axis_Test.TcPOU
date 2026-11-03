@@ -1,0 +1,178 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_Axis_Test" Id="{c0f24211-0b10-49cf-9345-e09ecb553f99}" SpecialFunc="None">
+    <Declaration><![CDATA[// Tests for FB_Axis, the simulated positioning axis. Each test drives the axis
+// to the end inside one PLC cycle (simulated time), so they are fast.
+FUNCTION_BLOCK FB_Axis_Test EXTENDS TcUnit.FB_TestSuite
+VAR
+    fbAxArrive  : FB_Axis(ipParent := 0, sNodeName := 'AxArrive');
+    fbAxLong    : FB_Axis(ipParent := 0, sNodeName := 'AxLong');
+    fbAxShort   : FB_Axis(ipParent := 0, sNodeName := 'AxShort');
+    fbAxFault   : FB_Axis(ipParent := 0, sNodeName := 'AxFault');
+    fbAxReset   : FB_Axis(ipParent := 0, sNodeName := 'AxReset');
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[Move_ArrivesInsideTheTolerance();
+LongMove_TakesTheTrapezoidTime();
+ShortMove_TakesTheTriangleTime();
+DriveFault_WhileMoving_FailsTheMove();
+Reset_AfterFault_AllowsTheNextMove();]]></ST>
+    </Implementation>
+    <Method Name="Move_ArrivesInsideTheTolerance" Id="{d9fd0238-6416-4240-9853-30681cd70845}">
+      <Declaration><![CDATA[METHOD PRIVATE Move_ArrivesInsideTheTolerance
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    eResult : E_CmdResult;
+    n : DINT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Move_ArrivesInsideTheTolerance');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+FOR n := 1 TO 20000 DO
+    eResult := fbAxArrive.MoveAbs(10.0);
+    IF eResult <> E_CmdResult.eBusy THEN EXIT; END_IF
+    fbAxArrive.Cyclic();
+END_FOR
+AssertTrue(Condition := eResult = E_CmdResult.eDone, Message := 'move must finish with eDone');
+AssertEquals_LREAL(Expected := 10.0, Actual := fbAxArrive.lrActPos, Delta := fbAxArrive.lrTolerance, Message := 'axis must stand inside the tolerance');
+AssertEquals_LREAL(Expected := 0.0, Actual := fbAxArrive.lrActVelo, Delta := 1.0E-9, Message := 'axis must stand still');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="LongMove_TakesTheTrapezoidTime" Id="{821c3f66-c014-486b-bc53-8c8fb04682ec}">
+      <Declaration><![CDATA[METHOD PRIVATE LongMove_TakesTheTrapezoidTime
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    eResult : E_CmdResult;
+    n : DINT;
+    lrTime : LREAL;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('LongMove_TakesTheTrapezoidTime');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+fbAxLong.lrVelocity := 3.0;
+fbAxLong.lrAccel    := 0.6;
+FOR n := 1 TO 20000 DO
+    eResult := fbAxLong.MoveAbs(20.0);
+    IF eResult <> E_CmdResult.eBusy THEN EXIT; END_IF
+    fbAxLong.Cyclic();
+    lrTime := lrTime + fbAxLong.lrCycleTime;
+END_FOR
+// 20 m >= v^2/a = 15 m -> top speed reached: t = s/v + v/a = 6.67 + 5.0 s
+AssertEquals_LREAL(Expected := F_TravelTime(20.0, 3.0, 0.6), Actual := lrTime, Delta := 0.1, Message := 'move time must match s/v + v/a');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ShortMove_TakesTheTriangleTime" Id="{c6fe0e02-f977-4e5a-a1d8-21b4e4b31a53}">
+      <Declaration><![CDATA[METHOD PRIVATE ShortMove_TakesTheTriangleTime
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    eResult : E_CmdResult;
+    n : DINT;
+    lrTime : LREAL;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('ShortMove_TakesTheTriangleTime');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+fbAxShort.lrVelocity := 3.0;
+fbAxShort.lrAccel    := 0.6;
+FOR n := 1 TO 20000 DO
+    eResult := fbAxShort.MoveAbs(1.0);
+    IF eResult <> E_CmdResult.eBusy THEN EXIT; END_IF
+    fbAxShort.Cyclic();
+    lrTime := lrTime + fbAxShort.lrCycleTime;
+END_FOR
+// 1 m < 15 m -> never reaches 3 m/s: t = 2 * sqrt(s/a) = 2.58 s
+AssertEquals_LREAL(Expected := F_TravelTime(1.0, 3.0, 0.6), Actual := lrTime, Delta := 0.1, Message := 'short move must follow the triangle profile');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="DriveFault_WhileMoving_FailsTheMove" Id="{b322b68b-5663-4a92-951a-d98e19015446}">
+      <Declaration><![CDATA[METHOD PRIVATE DriveFault_WhileMoving_FailsTheMove
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    eResult : E_CmdResult;
+    n : DINT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('DriveFault_WhileMoving_FailsTheMove');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+FOR n := 1 TO 50 DO
+    fbAxFault.MoveAbs(5.0);
+    fbAxFault.Cyclic();
+END_FOR
+fbAxFault.bDriveFault := TRUE;
+fbAxFault.Cyclic();
+eResult := fbAxFault.MoveAbs(5.0);
+AssertTrue(Condition := eResult = E_CmdResult.eError, Message := 'a drive fault during a move must give eError');
+AssertEquals_LREAL(Expected := 0.0, Actual := fbAxFault.lrActVelo, Delta := 1.0E-9, Message := 'a faulted axis must stand still');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Reset_AfterFault_AllowsTheNextMove" Id="{a9d70ef8-6242-44ee-8747-c455d2fecd82}">
+      <Declaration><![CDATA[METHOD PRIVATE Reset_AfterFault_AllowsTheNextMove
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    eResult : E_CmdResult;
+    n : DINT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Reset_AfterFault_AllowsTheNextMove');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+fbAxReset.MoveAbs(5.0);
+fbAxReset.Cyclic();
+fbAxReset.bDriveFault := TRUE;
+fbAxReset.Cyclic();
+fbAxReset.bDriveFault := FALSE;
+fbAxReset.Reset();
+FOR n := 1 TO 20000 DO
+    eResult := fbAxReset.MoveAbs(2.0);
+    IF eResult <> E_CmdResult.eBusy THEN EXIT; END_IF
+    fbAxReset.Cyclic();
+END_FOR
+AssertTrue(Condition := eResult = E_CmdResult.eDone, Message := 'after Reset a new move must work');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

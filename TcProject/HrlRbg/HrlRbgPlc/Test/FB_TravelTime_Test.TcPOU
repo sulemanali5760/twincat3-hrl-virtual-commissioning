@@ -1,0 +1,69 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_TravelTime_Test" Id="{73b6d48b-8010-4004-964b-5b71674faf92}" SpecialFunc="None">
+    <Declaration><![CDATA[// Tests for the travel-time formula behind the FEM 9.851 calculation.
+FUNCTION_BLOCK FB_TravelTime_Test EXTENDS TcUnit.FB_TestSuite
+VAR
+    nDummy : INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[Trapezoid_WhenTopSpeedIsReached();
+Triangle_WhenTopSpeedIsNotReached();
+NoDistance_TakesNoTime();]]></ST>
+    </Implementation>
+    <Method Name="Trapezoid_WhenTopSpeedIsReached" Id="{18154fec-ffe3-417a-9792-d10f66379386}">
+      <Declaration><![CDATA[METHOD PRIVATE Trapezoid_WhenTopSpeedIsReached
+VAR_INST
+    bRan : BOOL;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Trapezoid_WhenTopSpeedIsReached');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+AssertEquals_LREAL(Expected := 20.0 / 3.0 + 3.0 / 0.6, Actual := F_TravelTime(20.0, 3.0, 0.6), Delta := 1.0E-9, Message := 's/v + v/a');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Triangle_WhenTopSpeedIsNotReached" Id="{cf6259f5-76ca-484a-95b1-d217587cb477}">
+      <Declaration><![CDATA[METHOD PRIVATE Triangle_WhenTopSpeedIsNotReached
+VAR_INST
+    bRan : BOOL;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Triangle_WhenTopSpeedIsNotReached');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+AssertEquals_LREAL(Expected := 2.0 * SQRT(1.0 / 0.6), Actual := F_TravelTime(1.0, 3.0, 0.6), Delta := 1.0E-9, Message := '2 * sqrt(s/a)');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="NoDistance_TakesNoTime" Id="{6a4a8d52-3d47-4be1-9d0c-7700152368a1}">
+      <Declaration><![CDATA[METHOD PRIVATE NoDistance_TakesNoTime
+VAR_INST
+    bRan : BOOL;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('NoDistance_TakesNoTime');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+AssertEquals_LREAL(Expected := 0.0, Actual := F_TravelTime(0.0, 3.0, 0.6), Delta := 1.0E-9, Message := 'zero distance');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

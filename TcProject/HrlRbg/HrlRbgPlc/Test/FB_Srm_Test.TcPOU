@@ -1,0 +1,212 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_Srm_Test" Id="{4baa68a0-b381-49a6-81cd-67396de4f1ab}" SpecialFunc="None">
+    <Declaration><![CDATA[// Tests for FB_Srm, the storage and retrieval machine: whole jobs run in
+// simulated time, and the double cycle is checked against FEM 9.851.
+FUNCTION_BLOCK FB_Srm_Test EXTENDS TcUnit.FB_TestSuite
+VAR
+    fbRackStore : FB_Rack;
+    fbSrmStore  : FB_Srm(ipParent := 0, sNodeName := 'SrmStore');
+    fbRackGet : FB_Rack;
+    fbSrmGet  : FB_Srm(ipParent := 0, sNodeName := 'SrmGet');
+    fbRackOcc : FB_Rack;
+    fbSrmOcc  : FB_Srm(ipParent := 0, sNodeName := 'SrmOcc');
+    fbRackFault : FB_Rack;
+    fbSrmFault  : FB_Srm(ipParent := 0, sNodeName := 'SrmFault');
+    fbRackFem : FB_Rack;
+    fbSrmFem  : FB_Srm(ipParent := 0, sNodeName := 'SrmFem');
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[StoreJob_MovesThePalletFromStationIntoThePlace();
+RetrieveJob_BringsThePalletToTheStation();
+StartJob_IntoOccupiedPlace_IsRefused();
+TravelFault_StopsTheJobWithoutLosingThePallet();
+DoubleCycle_MatchesTheFem9851Calculation();]]></ST>
+    </Implementation>
+    <Method Name="StoreJob_MovesThePalletFromStationIntoThePlace" Id="{8d3a769b-8e11-4460-93c6-d9f16491515f}">
+      <Declaration><![CDATA[METHOD PRIVATE StoreJob_MovesThePalletFromStationIntoThePlace
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    stStation : ST_SlotAddr := (nSide := 1, nColumn := 0, nLevel := 1);
+    stPlace : ST_SlotAddr := (nSide := 2, nColumn := 4, nLevel := 3);
+    n : DINT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('StoreJob_MovesThePalletFromStationIntoThePlace');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+fbSrmStore.Init(fbRackStore);
+fbSrmStore.SetMode(E_OpMode.eAutomatic);
+fbRackStore.Put(stStation, 'LE0001');
+AssertTrue(Condition := fbSrmStore.StartJob(stStation, stPlace), Message := 'job must be accepted');
+FOR n := 1 TO 30000 DO
+    fbSrmStore.Cyclic();
+    IF fbSrmStore.bJobDone OR fbSrmStore.bFault THEN EXIT; END_IF
+END_FOR
+AssertTrue(Condition := fbSrmStore.bJobDone, Message := 'store job must finish');
+AssertEquals_STRING(Expected := 'LE0001', Actual := fbRackStore.LeIdAt(stPlace), Message := 'pallet must be booked into the place');
+AssertFalse(Condition := fbRackStore.IsOccupied(stStation), Message := 'station must be free');
+AssertEquals_LREAL(Expected := fbRackStore.TargetX(stPlace), Actual := fbSrmStore.TravelPos, Delta := 0.002, Message := 'RBG must stand at the place');
+AssertEquals_LREAL(Expected := 0.0, Actual := fbSrmStore.ForkActPos, Delta := 0.002, Message := 'fork must be back in the middle');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="RetrieveJob_BringsThePalletToTheStation" Id="{4bef2089-ab1b-4763-8c74-97573814d3eb}">
+      <Declaration><![CDATA[METHOD PRIVATE RetrieveJob_BringsThePalletToTheStation
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    stStation : ST_SlotAddr := (nSide := 1, nColumn := 0, nLevel := 1);
+    stPlace : ST_SlotAddr := (nSide := 2, nColumn := 4, nLevel := 3);
+    n : DINT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('RetrieveJob_BringsThePalletToTheStation');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+fbSrmGet.Init(fbRackGet);
+fbSrmGet.SetMode(E_OpMode.eAutomatic);
+fbRackGet.Put(stPlace, 'LE0002');
+fbSrmGet.StartJob(stPlace, stStation);
+FOR n := 1 TO 30000 DO
+    fbSrmGet.Cyclic();
+    IF fbSrmGet.bJobDone OR fbSrmGet.bFault THEN EXIT; END_IF
+END_FOR
+AssertEquals_STRING(Expected := 'LE0002', Actual := fbRackGet.LeIdAt(stStation), Message := 'pallet must arrive at the station');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="StartJob_IntoOccupiedPlace_IsRefused" Id="{a35445e5-825b-49fa-9805-d00f42d4a41b}">
+      <Declaration><![CDATA[METHOD PRIVATE StartJob_IntoOccupiedPlace_IsRefused
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    stStation : ST_SlotAddr := (nSide := 1, nColumn := 0, nLevel := 1);
+    stPlace : ST_SlotAddr := (nSide := 2, nColumn := 4, nLevel := 3);
+    n : DINT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('StartJob_IntoOccupiedPlace_IsRefused');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+fbSrmOcc.Init(fbRackOcc);
+fbRackOcc.Put(stStation, 'LE0001');
+fbRackOcc.Put(stPlace, 'LE0002');
+AssertFalse(Condition := fbSrmOcc.StartJob(stStation, stPlace), Message := 'target occupied -> no job');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="TravelFault_StopsTheJobWithoutLosingThePallet" Id="{2047b989-fe51-4419-ba36-b30fb85d82d8}">
+      <Declaration><![CDATA[METHOD PRIVATE TravelFault_StopsTheJobWithoutLosingThePallet
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    stStation : ST_SlotAddr := (nSide := 1, nColumn := 0, nLevel := 1);
+    stPlace : ST_SlotAddr := (nSide := 2, nColumn := 4, nLevel := 3);
+    n : DINT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('TravelFault_StopsTheJobWithoutLosingThePallet');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+fbSrmFault.Init(fbRackFault);
+fbSrmFault.SetMode(E_OpMode.eAutomatic);
+fbRackFault.Put(stPlace, 'LE0003');
+fbSrmFault.StartJob(stPlace, stStation);
+FOR n := 1 TO 100 DO
+    fbSrmFault.Cyclic();
+END_FOR
+fbSrmFault.InjectTravelFault(TRUE);
+FOR n := 1 TO 10 DO
+    fbSrmFault.Cyclic();
+END_FOR
+AssertTrue(Condition := fbSrmFault.bFault, Message := 'a travel fault must stop the job');
+AssertFalse(Condition := fbSrmFault.bJobDone, Message := 'faulted job is not done');
+AssertEquals_STRING(Expected := 'LE0003', Actual := fbRackFault.LeIdAt(stPlace), Message := 'pallet must still be booked where it is');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="DoubleCycle_MatchesTheFem9851Calculation" Id="{027a8beb-7914-4923-8907-908a3aa3370c}">
+      <Declaration><![CDATA[METHOD PRIVATE DoubleCycle_MatchesTheFem9851Calculation
+VAR_INST
+    bRan : BOOL;
+END_VAR
+VAR
+    stStation : ST_SlotAddr := (nSide := 1, nColumn := 0, nLevel := 1);
+    stP1 : ST_SlotAddr := (nSide := 1, nColumn := 4, nLevel := 6);   // ~ (1/5 L, 2/3 H)
+    stP2 : ST_SlotAddr := (nSide := 1, nColumn := 13, nLevel := 2);  // ~ (2/3 L, 1/5 H)
+    stKin : ST_SrmKinematics := (lrVeloX := 3.0, lrAccelX := 0.6, lrVeloY := 1.5, lrAccelY := 0.8, lrVeloZ := 0.6, lrAccelZ := 0.6);
+    n : DINT;
+    lrMeasured, lrCalc : LREAL;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('DoubleCycle_MatchesTheFem9851Calculation');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+fbSrmFem.Init(fbRackFem);
+// 1. home to the station
+fbSrmFem.SetMode(E_OpMode.eHoming);
+FOR n := 1 TO 3000 DO
+    fbSrmFem.Cyclic();
+END_FOR
+fbSrmFem.SetMode(E_OpMode.eAutomatic);
+// 2. store at P1, then retrieve from P2 = one double cycle
+fbRackFem.Put(stStation, 'LE0001');
+fbRackFem.Put(stP2, 'LE0002');
+fbSrmFem.StartJob(stStation, stP1);
+FOR n := 1 TO 30000 DO
+    fbSrmFem.Cyclic();
+    IF fbSrmFem.bJobDone THEN EXIT; END_IF
+END_FOR
+lrMeasured := fbSrmFem.lrLastJobTime;
+fbSrmFem.StartJob(stP2, stStation);
+FOR n := 1 TO 30000 DO
+    fbSrmFem.Cyclic();
+    IF fbSrmFem.bJobDone THEN EXIT; END_IF
+END_FOR
+lrMeasured := lrMeasured + fbSrmFem.lrLastJobTime;
+
+lrCalc := F_DoubleCycleTime(fbRackFem.NominalX(stP1), fbRackFem.NominalY(stP1) - GVL_Rack.cOffsetY,
+                            fbRackFem.NominalX(stP2), fbRackFem.NominalY(stP2) - GVL_Rack.cOffsetY, stKin);
+GVL_Test.lrDoubleCycleCalc     := lrCalc;
+GVL_Test.lrDoubleCycleMeasured := lrMeasured;
+IF lrMeasured > 0.0 THEN
+    GVL_Test.lrDoubleCyclesPerHour := 3600.0 / lrMeasured;
+END_IF
+AssertEquals_LREAL(Expected := lrCalc, Actual := lrMeasured, Delta := 0.05 * lrCalc,
+                   Message := 'simulated double cycle must be within 5 % of the FEM 9.851 calculation');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

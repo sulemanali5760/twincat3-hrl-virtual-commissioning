@@ -1,0 +1,12 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <GVL Name="GVL_Test" Id="{5af14218-5507-4eeb-b5e5-176a038ccb51}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+VAR_GLOBAL
+    // Results of the FEM 9.851 double-cycle test, for the performance protocol.
+    lrDoubleCycleCalc     : LREAL;   // calculated [s]
+    lrDoubleCycleMeasured : LREAL;   // measured in the simulation [s]
+    lrDoubleCyclesPerHour : LREAL;   // 3600 / measured
+END_VAR]]></Declaration>
+  </GVL>
+</TcPlcObject>

@@ -1,0 +1,75 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_IPoint_Test" Id="{bb5f29e1-68e3-4111-807c-52bdcc2b42ce}" SpecialFunc="None">
+    <Declaration><![CDATA[// Tests for FB_IPoint, the contour check and barcode read before storage.
+FUNCTION_BLOCK FB_IPoint_Test EXTENDS TcUnit.FB_TestSuite
+VAR
+    fbIpOk      : FB_IPoint;
+    fbIpContour : FB_IPoint;
+    fbIpNoRead  : FB_IPoint;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[GoodPallet_IsOk();
+Overhang_IsContourNio();
+NoBarcode_IsNoReadNio();]]></ST>
+    </Implementation>
+    <Method Name="GoodPallet_IsOk" Id="{94a5ab6c-a1e5-426e-bebc-a084f90ce7f4}">
+      <Declaration><![CDATA[METHOD PRIVATE GoodPallet_IsOk
+VAR_INST
+    bRan : BOOL;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('GoodPallet_IsOk');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+fbIpOk.sBarcode := 'LE0001';
+AssertTrue(Condition := fbIpOk.Check() = E_IPointResult.eOk, Message := 'clean contour and a read barcode = OK');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Overhang_IsContourNio" Id="{61496f0c-e9de-48af-af40-679cb5893366}">
+      <Declaration><![CDATA[METHOD PRIVATE Overhang_IsContourNio
+VAR_INST
+    bRan : BOOL;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Overhang_IsContourNio');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+fbIpContour.sBarcode      := 'LE0001';
+fbIpContour.bOverhangLeft := TRUE;
+AssertTrue(Condition := fbIpContour.Check() = E_IPointResult.eNioContour, Message := 'overhang must be rejected');
+AssertEquals_DINT(Expected := 1, Actual := fbIpContour.nNio, Message := 'NIO counter');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="NoBarcode_IsNoReadNio" Id="{de8c48f8-1523-430a-ac01-70f59fddd329}">
+      <Declaration><![CDATA[METHOD PRIVATE NoBarcode_IsNoReadNio
+VAR_INST
+    bRan : BOOL;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('NoBarcode_IsNoReadNio');
+IF bRan THEN
+    TEST_FINISHED();
+    RETURN;
+END_IF
+bRan := TRUE;
+
+AssertTrue(Condition := fbIpNoRead.Check() = E_IPointResult.eNioNoRead, Message := 'no barcode must be rejected');
+
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>
