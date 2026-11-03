@@ -1,0 +1,230 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_Srm" Id="{e7e460e5-1773-4178-aa85-2ed1edfb6def}" SpecialFunc="None">
+    <Declaration><![CDATA[// FB_Srm - the storage and retrieval machine (Regalbediengeraet, RBG) as a
+// mode node. Its three axes are child device nodes, so one Cyclic() on the RBG
+// runs the sequence first and then lets the axes move in the same scan.
+//
+// A job moves one load unit from a source place to a target place (either may
+// be the transfer station). The sequence is the classic single cycle:
+//   travel+hoist to source -> fork out -> lift -> fork in ->
+//   travel+hoist to target (loaded, lifted) -> fork out -> lower -> fork in.
+// Two jobs back to back (store, then retrieve) make a double cycle.
+FUNCTION_BLOCK FB_Srm EXTENDS FB_ModeNode
+VAR_OUTPUT
+    bBusy         : BOOL;         // a job is running
+    bJobDone      : BOOL;         // last job finished; stays TRUE until the next StartJob
+    bFault        : BOOL;         // sequence stopped on an axis fault -> ResetFault
+    nJobsDone     : DINT;
+    lrLastJobTime : LREAL;        // simulated duration of the last job [s]
+    sLeOnFork     : STRING(20);   // load unit currently on the fork
+END_VAR
+VAR
+    fbTravel : FB_Axis(ipParent := THIS^, sNodeName := 'Travel');
+    fbHoist  : FB_Axis(ipParent := THIS^, sNodeName := 'Hoist');
+    fbFork   : FB_Axis(ipParent := THIS^, sNodeName := 'Fork');
+    fbCycle  : FB_CycleManager;
+    refRack  : REFERENCE TO FB_Rack;
+    stSource : ST_SlotAddr;
+    stTarget : ST_SlotAddr;
+    bJobPending : BOOL;
+    lrJobTime   : LREAL;
+    bConfigured : BOOL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name="Init" Id="{2606bb96-b26f-473e-a1e5-fe1aa7d8ef9d}">
+      <Declaration><![CDATA[// Give the RBG the rack it works on (once, before the first job).
+METHOD PUBLIC Init
+VAR_INPUT
+    fbRackRef : REFERENCE TO FB_Rack;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[refRack REF= fbRackRef;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="StartJob" Id="{d21a0b8a-2c6f-44f5-a2c5-c8a173cd4891}">
+      <Declaration><![CDATA[// Accept a transport job. FALSE if busy, faulted, the addresses are invalid,
+// the source is empty or the target is occupied.
+METHOD PUBLIC StartJob : BOOL
+VAR_INPUT
+    stFrom : ST_SlotAddr;
+    stTo   : ST_SlotAddr;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[StartJob := FALSE;
+IF NOT __ISVALIDREF(refRack) OR bJobPending OR bFault THEN
+    RETURN;
+END_IF
+IF NOT refRack.IsValid(stFrom) OR NOT refRack.IsValid(stTo)
+   OR NOT refRack.IsOccupied(stFrom) OR refRack.IsOccupied(stTo) THEN
+    RETURN;
+END_IF
+stSource    := stFrom;
+stTarget    := stTo;
+lrJobTime   := 0.0;
+bJobDone    := FALSE;
+bJobPending := TRUE;
+fbCycle.Reset();   // so the next Call() sees a fresh start edge
+StartJob := TRUE;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ResetFault" Id="{102844a4-a02d-488d-80a5-935cca5dee90}">
+      <Declaration><![CDATA[// Acknowledge a fault. A load unit still on the fork stays booked on the fork.
+METHOD PUBLIC ResetFault
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[fbTravel.Reset();
+fbHoist.Reset();
+fbFork.Reset();
+fbCycle.Reset();
+bFault      := FALSE;
+bJobPending := FALSE;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="MoveXY" Id="{8ed925f3-320c-43ae-b443-8061ac0b0638}">
+      <Declaration><![CDATA[// Travel and hoist together; done when both are in position.
+METHOD PRIVATE MoveXY : E_CmdResult
+VAR_INPUT
+    lrX : LREAL;
+    lrY : LREAL;
+END_VAR
+VAR
+    eX, eY : E_CmdResult;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[eX := fbTravel.MoveAbs(lrX);
+eY := fbHoist.MoveAbs(lrY);
+IF eX = E_CmdResult.eError OR eY = E_CmdResult.eError THEN
+    MoveXY := E_CmdResult.eError;
+ELSIF eX = E_CmdResult.eDone AND eY = E_CmdResult.eDone THEN
+    MoveXY := E_CmdResult.eDone;
+ELSE
+    MoveXY := E_CmdResult.eBusy;
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ForkPos" Id="{22f9f345-278f-4379-944f-3767bb6d42b9}">
+      <Declaration><![CDATA[// Fork end position for a place: left side (and the station) negative, right positive.
+METHOD PRIVATE ForkPos : LREAL
+VAR_INPUT
+    stAddr : ST_SlotAddr;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF stAddr.nSide = 2 THEN
+    ForkPos := GVL_Rack.cForkStroke;
+ELSE
+    ForkPos := -GVL_Rack.cForkStroke;
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="OnCyclic" Id="{63552c8c-7e6f-4943-849f-332cc76481a9}">
+      <Declaration><![CDATA[METHOD PROTECTED OnCyclic
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF NOT bConfigured THEN
+    // Axis data of the practice RBG (in the range of a pallet RBG).
+    fbTravel.lrVelocity := 3.0;   fbTravel.lrAccel := 0.6;
+    fbHoist.lrVelocity  := 1.5;   fbHoist.lrAccel  := 0.8;
+    fbFork.lrVelocity   := 0.6;   fbFork.lrAccel   := 0.6;
+    bConfigured := TRUE;
+END_IF
+IF bJobPending THEN
+    lrJobTime := lrJobTime + fbTravel.lrCycleTime;
+END_IF
+SUPER^.OnCyclic();   // dispatch to RunAutomatic / RunManual / ...
+bBusy := bJobPending;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="RunAutomatic" Id="{1c491811-1d15-4b0c-8fa7-11cdbdd4b628}">
+      <Declaration><![CDATA[METHOD PROTECTED RunAutomatic
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF NOT __ISVALIDREF(refRack) THEN
+    RETURN;
+END_IF
+
+fbCycle.Call(bExecute := bJobPending);
+CASE fbCycle.Step OF
+    0:  fbCycle.Await(MoveXY(refRack.TargetX(stSource), refRack.TargetY(stSource)));
+    1:  fbCycle.Await(fbFork.MoveAbs(ForkPos(stSource)));
+    2:  IF fbCycle.Await(fbHoist.MoveAbs(refRack.TargetY(stSource) + GVL_Rack.cLiftStroke)) THEN
+            sLeOnFork := refRack.Take(stSource);   // pallet is now on the fork
+        END_IF
+    3:  fbCycle.Await(fbFork.MoveAbs(0.0));
+    4:  fbCycle.Await(MoveXY(refRack.TargetX(stTarget), refRack.TargetY(stTarget) + GVL_Rack.cLiftStroke));
+    5:  fbCycle.Await(fbFork.MoveAbs(ForkPos(stTarget)));
+    6:  IF fbCycle.Await(fbHoist.MoveAbs(refRack.TargetY(stTarget))) THEN
+            refRack.Put(stTarget, sLeOnFork);      // pallet is on the beams
+            sLeOnFork := '';
+        END_IF
+    7:  IF fbCycle.Await(fbFork.MoveAbs(0.0)) THEN
+            bJobPending   := FALSE;
+            bJobDone      := TRUE;
+            nJobsDone     := nJobsDone + 1;
+            lrLastJobTime := lrJobTime;
+        END_IF
+END_CASE
+
+IF fbCycle.Error THEN
+    bFault := TRUE;
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="RunHoming" Id="{3df1d843-ab70-45d4-98f5-f00941161007}">
+      <Declaration><![CDATA[// Go to the transfer station: fork in first, then travel and hoist.
+METHOD PROTECTED RunHoming
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF fbFork.MoveAbs(0.0) = E_CmdResult.eDone THEN
+    MoveXY(0.0, GVL_Rack.cOffsetY);
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Property Name="TravelPos" Id="{45f28468-6849-42bb-b99f-59986af2f565}">
+      <Declaration><![CDATA[PROPERTY PUBLIC TravelPos : LREAL]]></Declaration>
+      <Get Name="Get" Id="{26c474db-6e74-4182-8d5f-dcf7a660152c}">
+        <Declaration><![CDATA[VAR
+END_VAR]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[TravelPos := fbTravel.lrActPos;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Property Name="HoistPos" Id="{ca4b0749-018b-481f-8157-bb81f3af414e}">
+      <Declaration><![CDATA[PROPERTY PUBLIC HoistPos : LREAL]]></Declaration>
+      <Get Name="Get" Id="{754be553-2abe-486a-bad0-f3b05424f35f}">
+        <Declaration><![CDATA[VAR
+END_VAR]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[HoistPos := fbHoist.lrActPos;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Property Name="ForkActPos" Id="{e243a8e7-18e4-435d-aa88-519e1c2c3c68}">
+      <Declaration><![CDATA[PROPERTY PUBLIC ForkActPos : LREAL]]></Declaration>
+      <Get Name="Get" Id="{9f899b6a-5aef-484c-9ceb-3aa3b4b6c7fb}">
+        <Declaration><![CDATA[VAR
+END_VAR]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[ForkActPos := fbFork.lrActPos;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Method Name="InjectTravelFault" Id="{4fb8308f-ec07-4ab5-8f7f-04bf458645f9}">
+      <Declaration><![CDATA[// Test and commissioning aid: simulate a fault of the travel drive.
+METHOD PUBLIC InjectTravelFault
+VAR_INPUT
+    bFaultOn : BOOL;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[fbTravel.bDriveFault := bFaultOn;]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>
