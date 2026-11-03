@@ -96,8 +96,10 @@ ELSE
     lrDir := -1.0;
 END_IF
 
-// Fastest speed from which the axis can still stop at the target.
-lrVmax := MIN(lrVelocity, SQRT(2.0 * lrAccel * ABS(lrDist)));
+// Fastest speed from which the axis can still stop at the target, measured
+// from where it will be after this cycle - braking from the current position
+// starts one cycle late and lets the axis arrive faster than physics allows.
+lrVmax := MIN(lrVelocity, SQRT(2.0 * lrAccel * MAX(ABS(lrDist) - ABS(lrActVelo) * lrCycleTime, 0.0)));
 IF lrActVelo < lrDir * lrVmax THEN
     lrActVelo := MIN(lrActVelo + lrAccel * lrCycleTime, lrDir * lrVmax);
 ELSE
