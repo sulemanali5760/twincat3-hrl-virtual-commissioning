@@ -106,6 +106,9 @@ ELSIF fbPlant.fbRack.IsOccupied(stStation) AND NOT fbPlant.bStationOutbound
         nTail   := nTail + 1;
         nStored := nStored + 1;
         nStoresSinceRetrieve := nStoresSinceRetrieve + 1;
+        IF nStoresSinceRetrieve >= 3 THEN
+            fbPlant.ReserveStation();   // the next station slot is for a retrieval
+        END_IF
     END_IF
 END_IF]]></ST>
       </Implementation>

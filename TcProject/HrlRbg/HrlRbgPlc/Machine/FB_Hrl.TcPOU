@@ -21,6 +21,7 @@ VAR
 END_VAR
 VAR_OUTPUT
     bStationOutbound : BOOL;   // pallet on the station is leaving (retrieved), not arriving
+    bStationReserved : BOOL;   // station held free for a retrieval: the in-feed must wait
 END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[]]></ST>
@@ -52,11 +53,13 @@ END_VAR]]></Declaration>
 // In-feed -> transfer station
 CASE nInStep OF
     0:  IF fbInfeed.eState = E_ZoneState.eOccupied AND NOT fbRack.IsOccupied(stStation)
-           AND NOT bStationOutbound THEN   // station is reserved for a retrieval
+           AND NOT bStationOutbound AND NOT bStationReserved THEN
             sMovingLe := fbInfeed.sLeId;
             nInStep   := 1;
         END_IF
-    1:  IF fbInfeed.Deliver() = E_CmdResult.eDone THEN
+    // Done once our pallet has left the zone. The previous zone may hand over
+    // the next pallet in the same cycle, so "zone empty" alone can be missed.
+    1:  IF fbInfeed.Deliver() = E_CmdResult.eDone OR fbInfeed.sLeId <> sMovingLe THEN
             fbRack.Put(stStation, sMovingLe);
             nInStep := 0;
         END_IF
@@ -67,6 +70,7 @@ IF bStationOutbound AND fbRack.IsOccupied(stStation)
    AND fbOutfeed.eState = E_ZoneState.eEmpty THEN
     fbOutfeed.Accept(fbRack.Take(stStation));
     bStationOutbound := FALSE;
+    bStationReserved := FALSE;   // station free for the in-feed again
 END_IF
 IF fbOutfeed.eState = E_ZoneState.eOccupied THEN
     fbOutfeed.Deliver();   // goods-out takes it away
@@ -80,6 +84,17 @@ VAR_INPUT
 END_VAR]]></Declaration>
       <Implementation>
         <ST><![CDATA[bStationOutbound := TRUE;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ReserveStation" Id="{3c1f6a52-8e0d-4b7a-9f31-5d2e7a90c4b8}">
+      <Declaration><![CDATA[// Hold the transfer station free for the next retrieval. Without this the
+// in-feed refills the station every time the RBG picks a pallet from it, and
+// a retrieval never finds the station empty.
+METHOD PUBLIC ReserveStation
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[bStationReserved := TRUE;]]></ST>
       </Implementation>
     </Method>
   </POU>
