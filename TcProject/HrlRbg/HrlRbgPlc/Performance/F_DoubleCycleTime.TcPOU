@@ -1,0 +1,23 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F_DoubleCycleTime" Id="{6da3ccc7-783b-4069-9f03-df911c2d85dd}" SpecialFunc="None">
+    <Declaration><![CDATA[// Double cycle as in the FEM 9.851 performance proof: from the transfer
+// station store a pallet at P1, travel empty to P2, retrieve a pallet there and
+// bring it back to the station. P1 and P2 are the reference places given as
+// coordinates relative to the transfer station.
+// FEM 9.851 places them at P1 = (1/5 L, 2/3 H) and P2 = (2/3 L, 1/5 H)
+// (rack length L, rack height H) - see F_Fem9851Points.
+FUNCTION F_DoubleCycleTime : LREAL
+VAR_INPUT
+    lrX1, lrY1 : LREAL;   // P1 relative to the station [m]
+    lrX2, lrY2 : LREAL;   // P2 relative to the station [m]
+    stKin      : ST_SrmKinematics;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[F_DoubleCycleTime := 4.0 * F_LoadHandlingTime(stKin)          // 2 x pick, 2 x deposit
+                   + F_MoveTime(lrX1, lrY1, stKin)              // station -> P1 (loaded)
+                   + F_MoveTime(lrX2 - lrX1, lrY2 - lrY1, stKin) // P1 -> P2 (empty)
+                   + F_MoveTime(lrX2, lrY2, stKin);             // P2 -> station (loaded)]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

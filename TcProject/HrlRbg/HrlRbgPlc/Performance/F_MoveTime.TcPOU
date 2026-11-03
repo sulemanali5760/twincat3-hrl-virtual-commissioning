@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F_MoveTime" Id="{694e63f0-7b46-4a9e-bbce-fb6aa0bc6d85}" SpecialFunc="None">
+    <Declaration><![CDATA[// Travel and hoist run at the same time, so a move takes as long as the slower axis.
+FUNCTION F_MoveTime : LREAL
+VAR_INPUT
+    lrDx  : LREAL;
+    lrDy  : LREAL;
+    stKin : ST_SrmKinematics;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[F_MoveTime := MAX(F_TravelTime(lrDx, stKin.lrVeloX, stKin.lrAccelX),
+                  F_TravelTime(lrDy, stKin.lrVeloY, stKin.lrAccelY));]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

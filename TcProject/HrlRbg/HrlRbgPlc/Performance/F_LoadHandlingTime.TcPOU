@@ -1,0 +1,14 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="F_LoadHandlingTime" Id="{b197f9ca-19c3-496e-96a1-bd37a291bb33}" SpecialFunc="None">
+    <Declaration><![CDATA[// One pick or one deposit at a place: fork out, lift or lower, fork in.
+FUNCTION F_LoadHandlingTime : LREAL
+VAR_INPUT
+    stKin : ST_SrmKinematics;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[F_LoadHandlingTime := 2.0 * F_TravelTime(GVL_Rack.cForkStroke, stKin.lrVeloZ, stKin.lrAccelZ)
+                    + F_TravelTime(GVL_Rack.cLiftStroke, stKin.lrVeloY, stKin.lrAccelY);]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

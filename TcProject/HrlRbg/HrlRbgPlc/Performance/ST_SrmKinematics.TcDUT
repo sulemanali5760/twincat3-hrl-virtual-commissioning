@@ -1,0 +1,15 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_SrmKinematics" Id="{82b22a17-5091-40dc-8654-72c5bc060c9e}">
+    <Declaration><![CDATA[TYPE ST_SrmKinematics :
+STRUCT
+    lrVeloX  : LREAL;   // travel
+    lrAccelX : LREAL;
+    lrVeloY  : LREAL;   // hoist
+    lrAccelY : LREAL;
+    lrVeloZ  : LREAL;   // telescopic fork
+    lrAccelZ : LREAL;
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>
