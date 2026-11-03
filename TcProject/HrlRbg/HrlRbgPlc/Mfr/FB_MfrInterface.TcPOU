@@ -1,0 +1,175 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_MfrInterface" Id="{76bf08a9-3fc8-4910-85fe-2ce9f2edc0f8}" SpecialFunc="None">
+    <Declaration><![CDATA[// FB_MfrInterface - the PLC side of the telegram interface to the material
+// flow computer. Every incoming telegram is checked before anything moves:
+// sequence number, duplicate order, valid addresses, RBG free, source really
+// occupied by the ordered load unit, target free. The answer is TACK (accepted)
+// or TERR with a status code. When the RBG finishes, the interface sends TDON
+// and expects the MFR to acknowledge it within lrAckTimeout.
+FUNCTION_BLOCK FB_MfrInterface
+VAR_INPUT
+    lrCycleTime  : LREAL := 0.01;
+    lrAckTimeout : LREAL := 5.0;   // simulated seconds for the MFR to acknowledge TDON
+END_VAR
+VAR_OUTPUT
+    stOutbox     : ST_Telegram;    // last unsolicited telegram (TDON / TERR) for the MFR
+    nOutboxCount : DINT;           // +1 per new outbox telegram (edge for the sender)
+    nLastStatus  : INT;
+    bAckTimeout  : BOOL;
+END_VAR
+VAR
+    refRack      : REFERENCE TO FB_Rack;
+    refSrm       : REFERENCE TO FB_Srm;
+    nExpectedSeq : UINT := 1;
+    nSendSeq     : UINT;
+    nActiveOrder : DINT;
+    nLastOrder   : DINT;
+    bAwaitAck    : BOOL;
+    lrAckWait    : LREAL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name="Init" Id="{ca6d7150-d8a3-4457-85d9-46b248db452e}">
+      <Declaration><![CDATA[METHOD PUBLIC Init
+VAR_INPUT
+    fbRackRef : REFERENCE TO FB_Rack;
+    fbSrmRef  : REFERENCE TO FB_Srm;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[refRack REF= fbRackRef;
+refSrm  REF= fbSrmRef;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Reply" Id="{5d0914dd-3006-4852-b4aa-ebdc6b019f9a}">
+      <Declaration><![CDATA[METHOD PRIVATE Reply : ST_Telegram
+VAR_INPUT
+    sType   : STRING(4);
+    stIn    : ST_Telegram;
+    nStatus : INT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[nSendSeq       := nSendSeq + 1;
+Reply          := stIn;
+Reply.sType    := sType;
+Reply.nSeq     := nSendSeq;
+Reply.nStatus  := nStatus;
+nLastStatus    := nStatus;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Receive" Id="{2bf5cfed-4e17-4d4d-a1da-b034d6211810}">
+      <Declaration><![CDATA[// Handle one telegram from the MFR and return the immediate answer.
+METHOD PUBLIC Receive : ST_Telegram
+VAR_INPUT
+    stIn : ST_Telegram;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF NOT __ISVALIDREF(refRack) OR NOT __ISVALIDREF(refSrm) THEN
+    RETURN;
+END_IF
+
+// 1. Sequence: a lost or repeated telegram must never move a pallet.
+IF stIn.nSeq <> nExpectedSeq THEN
+    Receive := Reply('TERR', stIn, GVL_Mfr.cWrongSequence);
+    RETURN;
+END_IF
+nExpectedSeq := nExpectedSeq + 1;
+
+IF stIn.sType = 'TACK' THEN
+    // MFR acknowledges our TDON
+    IF bAwaitAck AND stIn.nOrder = nLastOrder THEN
+        bAwaitAck := FALSE;
+        lrAckWait := 0.0;
+    END_IF
+    RETURN;   // no answer to an acknowledgement
+END_IF
+
+IF stIn.sType <> 'TORD' THEN
+    Receive := Reply('TERR', stIn, GVL_Mfr.cUnknownTelegram);
+    RETURN;
+END_IF
+
+// 2. Transport order: check everything before the RBG moves.
+IF stIn.nOrder = nActiveOrder OR stIn.nOrder = nLastOrder THEN
+    Receive := Reply('TERR', stIn, GVL_Mfr.cDuplicateOrder);
+ELSIF NOT refRack.IsValid(stIn.stSource) OR NOT refRack.IsValid(stIn.stTarget) THEN
+    Receive := Reply('TERR', stIn, GVL_Mfr.cInvalidAddress);
+ELSIF nActiveOrder <> 0 OR refSrm.bBusy OR refSrm.bFault THEN
+    Receive := Reply('TERR', stIn, GVL_Mfr.cSrmBusy);
+ELSIF NOT refRack.IsOccupied(stIn.stSource) THEN
+    Receive := Reply('TERR', stIn, GVL_Mfr.cSlotEmpty);
+ELSIF refRack.IsOccupied(stIn.stTarget) THEN
+    Receive := Reply('TERR', stIn, GVL_Mfr.cSlotOccupied);
+ELSIF refRack.LeIdAt(stIn.stSource) <> stIn.sLeId THEN
+    Receive := Reply('TERR', stIn, GVL_Mfr.cLeMismatch);
+ELSIF refSrm.StartJob(stIn.stSource, stIn.stTarget) THEN
+    nActiveOrder := stIn.nOrder;
+    Receive := Reply('TACK', stIn, GVL_Mfr.cStatusOk);
+ELSE
+    Receive := Reply('TERR', stIn, GVL_Mfr.cSrmBusy);
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Cyclic" Id="{b4c8a76a-d78a-4a13-ae1f-ef90e2ebb5e8}">
+      <Declaration><![CDATA[// Call every cycle: reports the end of the active order and watches the ack.
+METHOD PUBLIC Cyclic
+VAR_INPUT
+END_VAR
+VAR
+    stDone : ST_Telegram;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF NOT __ISVALIDREF(refSrm) THEN
+    RETURN;
+END_IF
+
+IF nActiveOrder <> 0 THEN
+    stDone.nOrder := nActiveOrder;
+    IF refSrm.bJobDone THEN
+        stOutbox     := Reply('TDON', stDone, GVL_Mfr.cStatusOk);
+        nOutboxCount := nOutboxCount + 1;
+        nLastOrder   := nActiveOrder;
+        nActiveOrder := 0;
+        bAwaitAck    := TRUE;
+        lrAckWait    := 0.0;
+    ELSIF refSrm.bFault THEN
+        stOutbox     := Reply('TERR', stDone, GVL_Mfr.cSrmFault);
+        nOutboxCount := nOutboxCount + 1;
+        nLastOrder   := nActiveOrder;
+        nActiveOrder := 0;
+    END_IF
+END_IF
+
+IF bAwaitAck THEN
+    lrAckWait := lrAckWait + lrCycleTime;
+    IF lrAckWait > lrAckTimeout THEN
+        bAwaitAck   := FALSE;
+        bAckTimeout := TRUE;   // shown as a fault; the order itself is done
+        nLastStatus := GVL_Mfr.cAckTimeout;
+    END_IF
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Property Name="ActiveOrder" Id="{0aa060dc-3b80-4f00-8040-9abd7c67c3b1}">
+      <Declaration><![CDATA[PROPERTY PUBLIC ActiveOrder : DINT]]></Declaration>
+      <Get Name="Get" Id="{a4a5facd-f0ef-49a6-9ec4-23084d9fba1e}">
+        <Declaration><![CDATA[VAR
+END_VAR]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[ActiveOrder := nActiveOrder;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Property Name="AwaitingAck" Id="{c1cdd7b3-6d51-4e43-9496-a9bbc852f8b8}">
+      <Declaration><![CDATA[PROPERTY PUBLIC AwaitingAck : BOOL]]></Declaration>
+      <Get Name="Get" Id="{785133c8-afa1-4468-8ec9-3c1610ed7600}">
+        <Declaration><![CDATA[VAR
+END_VAR]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[AwaitingAck := bAwaitAck;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,20 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <GVL Name="GVL_Mfr" Id="{f18d10a6-16b6-479e-80dd-2f05055bec9f}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+VAR_GLOBAL CONSTANT
+    cStatusOk         : INT := 0;
+    cSlotOccupied     : INT := 10;   // target place occupied
+    cSlotEmpty        : INT := 11;   // source place empty
+    cContourNio       : INT := 20;   // pallet failed the I-point
+    cAckTimeout       : INT := 30;   // MFR did not acknowledge TDON in time
+    cWrongSequence    : INT := 40;   // telegram sequence number out of order
+    cDuplicateOrder   : INT := 41;   // order number already active / just done
+    cInvalidAddress   : INT := 42;
+    cSrmBusy          : INT := 43;
+    cLeMismatch       : INT := 44;   // load unit at the source is not the one ordered
+    cUnknownTelegram  : INT := 45;
+    cSrmFault         : INT := 50;
+END_VAR]]></Declaration>
+  </GVL>
+</TcPlcObject>

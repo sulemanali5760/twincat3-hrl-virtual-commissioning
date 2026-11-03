@@ -1,0 +1,18 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_Telegram" Id="{f296d3a0-1b8c-41e0-8b52-ecb30770f4fe}">
+    <Declaration><![CDATA[// One telegram between the material flow computer (MFR, e.g. WAMAS) and the PLC.
+// The real WAMAS layout is project-specific; this is a typical fixed layout.
+TYPE ST_Telegram :
+STRUCT
+    sType    : STRING(4);    // TORD order, TACK acknowledge, TDON done, TERR error
+    nSeq     : UINT;         // sequence number of the sender, +1 per telegram
+    nOrder   : DINT;         // transport order number
+    sLeId    : STRING(20);   // load unit id
+    stSource : ST_SlotAddr;
+    stTarget : ST_SlotAddr;
+    nStatus  : INT;          // GVL_Mfr status codes, 0 = OK
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>
