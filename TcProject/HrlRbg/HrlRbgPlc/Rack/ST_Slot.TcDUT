@@ -1,0 +1,14 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_Slot" Id="{49e7efe3-08fb-4b4d-9ecf-adbb9a774f2a}">
+    <Declaration><![CDATA[TYPE ST_Slot :
+STRUCT
+    bOccupied : BOOL;
+    sLeId     : STRING(20);   // load unit id (pallet barcode)
+    bTaught   : BOOL;         // TRUE once the place was measured in teach mode
+    lrTaughtX : LREAL;        // measured travel position [m]
+    lrTaughtY : LREAL;        // measured hoist position [m]
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

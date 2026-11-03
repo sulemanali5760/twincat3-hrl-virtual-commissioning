@@ -1,0 +1,21 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <GVL Name="GVL_Rack" Id="{cc8b8d5c-a424-4614-9688-35ca7f1a646f}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+VAR_GLOBAL CONSTANT
+    // Rack geometry of the practice plant: one aisle, single-deep, both sides.
+    cSides      : INT   := 2;
+    cColumns    : INT   := 20;
+    cLevels     : INT   := 8;
+    cPitchX     : LREAL := 1.40;   // column pitch incl. upright [m]
+    cPitchY     : LREAL := 1.30;   // level pitch [m]
+    cOffsetX    : LREAL := 2.00;   // transfer station -> centre of column 1 [m]
+    cOffsetY    : LREAL := 0.50;   // fork height at level 1 / transfer station [m]
+    cForkStroke : LREAL := 1.10;   // telescopic fork travel into a place [m]
+    cLiftStroke : LREAL := 0.10;   // lift to take a pallet off its beams [m]
+    // Teach-in: a measured place may differ from the drawing by this much;
+    // more means a bent or wrongly built rack -> reject and check the rack.
+    cTeachTolerance : LREAL := 0.020;   // [m]
+END_VAR]]></Declaration>
+  </GVL>
+</TcPlcObject>

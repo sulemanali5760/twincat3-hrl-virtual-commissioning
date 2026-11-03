@@ -1,0 +1,15 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_SlotAddr" Id="{09094c7a-0237-42b6-9bce-7c8f5099810a}">
+    <Declaration><![CDATA[// Address of a storage place, as the material flow computer sends it.
+// Column 0 / level 1 / side 1 is the transfer station (Uebergabeplatz) at the
+// front of the aisle, where the pre-zone hands pallets to the RBG.
+TYPE ST_SlotAddr :
+STRUCT
+    nSide   : INT;   // 1 = left, 2 = right (seen from the transfer station)
+    nColumn : INT;   // 1..GVL_Rack.cColumns, 0 = transfer station
+    nLevel  : INT;   // 1..GVL_Rack.cLevels
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

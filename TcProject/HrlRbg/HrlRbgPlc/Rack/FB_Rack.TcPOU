@@ -1,0 +1,238 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_Rack" Id="{14e461bf-c86e-4cd6-a92f-89bc769b59cc}" SpecialFunc="None">
+    <Declaration><![CDATA[// FB_Rack - the PLC's picture of the rack: which place is occupied by which
+// load unit, and where each place really is (nominal from the drawing, or the
+// value measured during teach-in). It is data, not a machine node, so the RBG,
+// the MFR interface and the tests all share one instance by reference.
+FUNCTION_BLOCK FB_Rack
+VAR
+    aSlot     : ARRAY[1..GVL_Rack.cSides, 1..GVL_Rack.cColumns, 1..GVL_Rack.cLevels] OF ST_Slot;
+    stStation : ST_Slot;   // the transfer station in front of the aisle
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name="IsStation" Id="{9dd6fa55-0a1f-4eef-9074-3909bbc95a96}">
+      <Declaration><![CDATA[METHOD PUBLIC IsStation : BOOL
+VAR_INPUT
+    stAddr : ST_SlotAddr;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IsStation := stAddr.nColumn = 0 AND stAddr.nLevel = 1 AND stAddr.nSide = 1;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="IsValid" Id="{1942a2e8-355c-47d2-93f7-d2c109649fcf}">
+      <Declaration><![CDATA[METHOD PUBLIC IsValid : BOOL
+VAR_INPUT
+    stAddr : ST_SlotAddr;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IsValid := IsStation(stAddr)
+        OR (stAddr.nSide >= 1 AND stAddr.nSide <= GVL_Rack.cSides
+            AND stAddr.nColumn >= 1 AND stAddr.nColumn <= GVL_Rack.cColumns
+            AND stAddr.nLevel >= 1 AND stAddr.nLevel <= GVL_Rack.cLevels);]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Slot" Id="{ef3c02ec-3d0e-4e36-92f0-78d1ae2cd3dd}">
+      <Declaration><![CDATA[// Pointer to the place record, or 0 for an invalid address.
+METHOD PRIVATE Slot : POINTER TO ST_Slot
+VAR_INPUT
+    stAddr : ST_SlotAddr;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF IsStation(stAddr) THEN
+    Slot := ADR(stStation);
+ELSIF IsValid(stAddr) THEN
+    Slot := ADR(aSlot[stAddr.nSide, stAddr.nColumn, stAddr.nLevel]);
+ELSE
+    Slot := 0;
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="NominalX" Id="{7638ad0e-522a-40c0-a885-c3cbebcfacc7}">
+      <Declaration><![CDATA[// Travel position of a place from the drawing [m].
+METHOD PUBLIC NominalX : LREAL
+VAR_INPUT
+    stAddr : ST_SlotAddr;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF IsStation(stAddr) THEN
+    NominalX := 0.0;
+ELSE
+    NominalX := GVL_Rack.cOffsetX + INT_TO_LREAL(stAddr.nColumn - 1) * GVL_Rack.cPitchX;
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="NominalY" Id="{1b3d31de-ef2c-413e-a818-bf6d0bf04637}">
+      <Declaration><![CDATA[// Hoist position of a place from the drawing [m].
+METHOD PUBLIC NominalY : LREAL
+VAR_INPUT
+    stAddr : ST_SlotAddr;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[NominalY := GVL_Rack.cOffsetY + INT_TO_LREAL(stAddr.nLevel - 1) * GVL_Rack.cPitchY;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="TargetX" Id="{3fab5652-85d7-4ab9-a2be-24225cf1e157}">
+      <Declaration><![CDATA[// Where the RBG drives to: the taught position if there is one, else nominal.
+METHOD PUBLIC TargetX : LREAL
+VAR_INPUT
+    stAddr : ST_SlotAddr;
+END_VAR
+VAR
+    pSlot : POINTER TO ST_Slot;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[pSlot := Slot(stAddr);
+IF pSlot <> 0 AND_THEN pSlot^.bTaught THEN
+    TargetX := pSlot^.lrTaughtX;
+ELSE
+    TargetX := NominalX(stAddr);
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="TargetY" Id="{851bd6ca-47a5-4988-8267-d7eb9ec102da}">
+      <Declaration><![CDATA[METHOD PUBLIC TargetY : LREAL
+VAR_INPUT
+    stAddr : ST_SlotAddr;
+END_VAR
+VAR
+    pSlot : POINTER TO ST_Slot;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[pSlot := Slot(stAddr);
+IF pSlot <> 0 AND_THEN pSlot^.bTaught THEN
+    TargetY := pSlot^.lrTaughtY;
+ELSE
+    TargetY := NominalY(stAddr);
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Teach" Id="{3ec5a4dc-b028-4de8-90e1-6fc28487a457}">
+      <Declaration><![CDATA[// Store the measured position of a place (teach-in). Returns FALSE and keeps
+// the old value if the measurement is further than cTeachTolerance from the
+// drawing - that is a rack to check, not a value to learn.
+METHOD PUBLIC Teach : BOOL
+VAR_INPUT
+    stAddr : ST_SlotAddr;
+    lrX    : LREAL;   // measured travel position [m] (laser distance sensor)
+    lrY    : LREAL;   // measured hoist position [m]
+END_VAR
+VAR
+    pSlot : POINTER TO ST_Slot;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[pSlot := Slot(stAddr);
+IF pSlot = 0 OR IsStation(stAddr)
+   OR ABS(lrX - NominalX(stAddr)) > GVL_Rack.cTeachTolerance
+   OR ABS(lrY - NominalY(stAddr)) > GVL_Rack.cTeachTolerance THEN
+    Teach := FALSE;
+    RETURN;
+END_IF
+pSlot^.lrTaughtX := lrX;
+pSlot^.lrTaughtY := lrY;
+pSlot^.bTaught   := TRUE;
+Teach := TRUE;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="IsOccupied" Id="{b504fa3f-6e93-4a06-aa9e-cc66ef032019}">
+      <Declaration><![CDATA[METHOD PUBLIC IsOccupied : BOOL
+VAR_INPUT
+    stAddr : ST_SlotAddr;
+END_VAR
+VAR
+    pSlot : POINTER TO ST_Slot;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[pSlot := Slot(stAddr);
+IsOccupied := pSlot <> 0 AND_THEN pSlot^.bOccupied;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="LeIdAt" Id="{5a4b95ad-b072-44c9-bba7-3bde1d324b3d}">
+      <Declaration><![CDATA[METHOD PUBLIC LeIdAt : STRING(20)
+VAR_INPUT
+    stAddr : ST_SlotAddr;
+END_VAR
+VAR
+    pSlot : POINTER TO ST_Slot;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[pSlot := Slot(stAddr);
+IF pSlot <> 0 AND_THEN pSlot^.bOccupied THEN
+    LeIdAt := pSlot^.sLeId;
+ELSE
+    LeIdAt := '';
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Put" Id="{d4cc8490-85b9-448e-951e-002b38e7d016}">
+      <Declaration><![CDATA[// Book a load unit into a place. FALSE if the place is invalid or occupied.
+METHOD PUBLIC Put : BOOL
+VAR_INPUT
+    stAddr : ST_SlotAddr;
+    sLeId  : STRING(20);
+END_VAR
+VAR
+    pSlot : POINTER TO ST_Slot;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[pSlot := Slot(stAddr);
+IF pSlot = 0 OR_ELSE pSlot^.bOccupied OR sLeId = '' THEN
+    Put := FALSE;
+    RETURN;
+END_IF
+pSlot^.bOccupied := TRUE;
+pSlot^.sLeId     := sLeId;
+Put := TRUE;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Take" Id="{c2a3f9fa-4303-4715-8bce-e23f49194821}">
+      <Declaration><![CDATA[// Book a load unit out of a place; returns its id, or '' if the place was empty.
+METHOD PUBLIC Take : STRING(20)
+VAR_INPUT
+    stAddr : ST_SlotAddr;
+END_VAR
+VAR
+    pSlot : POINTER TO ST_Slot;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[pSlot := Slot(stAddr);
+IF pSlot = 0 OR_ELSE NOT pSlot^.bOccupied THEN
+    Take := '';
+    RETURN;
+END_IF
+Take := pSlot^.sLeId;
+pSlot^.bOccupied := FALSE;
+pSlot^.sLeId     := '';]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="FindFree" Id="{16e54952-01b9-4c58-ac66-ca23d968fa89}">
+      <Declaration><![CDATA[// First free place, filled column by column from the transfer station
+// (short travel first). FALSE if the rack is full.
+METHOD PUBLIC FindFree : BOOL
+VAR_IN_OUT
+    stFound : ST_SlotAddr;
+END_VAR
+VAR
+    nCol, nLvl, nSide : INT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[FOR nCol := 1 TO GVL_Rack.cColumns DO
+    FOR nLvl := 1 TO GVL_Rack.cLevels DO
+        FOR nSide := 1 TO GVL_Rack.cSides DO
+            IF NOT aSlot[nSide, nCol, nLvl].bOccupied THEN
+                stFound.nSide   := nSide;
+                stFound.nColumn := nCol;
+                stFound.nLevel  := nLvl;
+                FindFree := TRUE;
+                RETURN;
+            END_IF
+        END_FOR
+    END_FOR
+END_FOR
+FindFree := FALSE;]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>
