@@ -1,0 +1,124 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_Axis" Id="{a017504c-3a48-4932-a8f1-5affc0cdb593}" SpecialFunc="None">
+    <Declaration><![CDATA[// FB_Axis - one positioning axis of the RBG (travel, hoist or telescopic fork)
+// as a device node. The outside sees one command, MoveAbs(), returning an
+// E_CmdResult - same contract as the cylinder in the pick-and-place demo.
+//
+// There is no drive on a soft-PLC, so the axis simulates itself: a trapezoid
+// velocity profile with limited speed and acceleration, integrated once per
+// call with lrCycleTime. lrActPos stands for the laser distance sensor value.
+// Simulated time (not wall clock) keeps the tests fast and repeatable.
+FUNCTION_BLOCK FB_Axis EXTENDS FB_CyclicNode
+VAR_INPUT
+    lrVelocity    : LREAL := 1.0;     // max. speed [m/s]
+    lrAccel       : LREAL := 0.5;     // acceleration = deceleration [m/s2]
+    lrTolerance   : LREAL := 0.002;   // in-position window [m]
+    lrCycleTime   : LREAL := 0.01;    // simulated seconds per call (= PlcTask 10 ms)
+    lrMoveTimeout : LREAL := 60.0;    // simulated seconds before a move counts as failed
+    bDriveFault   : BOOL;             // drive reports a fault (from the drive / a test)
+END_VAR
+VAR_OUTPUT
+    lrActPos    : LREAL;              // actual position [m] (laser distance sensor)
+    lrActVelo   : LREAL;              // actual velocity [m/s]
+    bInPosition : BOOL := TRUE;
+    bError      : BOOL;
+END_VAR
+VAR
+    lrTarget   : LREAL;
+    lrMoveTime : LREAL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name="MoveAbs" Id="{ef78a78f-f6c9-48f3-8ab6-43acde30518f}">
+      <Declaration><![CDATA[// Drive to an absolute position. eBusy while moving, eDone in position,
+// eError on a drive fault or a move that does not arrive in lrMoveTimeout.
+METHOD PUBLIC MoveAbs : E_CmdResult
+VAR_INPUT
+    lrPos : LREAL;   // target [m]
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF ABS(lrPos - lrTarget) > 1.0E-9 THEN   // a new target is a new move
+    lrTarget    := lrPos;
+    lrMoveTime  := 0.0;
+    bInPosition := ABS(lrActPos - lrTarget) <= lrTolerance;
+END_IF
+IF bError THEN
+    MoveAbs := E_CmdResult.eError;
+ELSIF bInPosition THEN
+    MoveAbs := E_CmdResult.eDone;
+ELSE
+    MoveAbs := E_CmdResult.eBusy;
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Reset" Id="{6b816bcc-d453-4a15-ad7a-4ae4a4f1cc9d}">
+      <Declaration><![CDATA[// Acknowledge a fault: the axis stops where it is and waits for a new target.
+METHOD PUBLIC Reset
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[bError      := FALSE;
+lrActVelo   := 0.0;
+lrTarget    := lrActPos;
+lrMoveTime  := 0.0;
+bInPosition := TRUE;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="OnCyclic" Id="{422ef1ea-eed0-4a64-b69d-569d6f087572}">
+      <Declaration><![CDATA[METHOD PROTECTED OnCyclic
+VAR_INPUT
+END_VAR
+VAR
+    lrDist : LREAL;
+    lrDir  : LREAL;
+    lrVmax : LREAL;
+    lrStep : LREAL;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF bDriveFault THEN
+    lrActVelo := 0.0;
+    IF NOT bInPosition THEN
+        bError := TRUE;   // a fault while moving fails the move
+    END_IF
+    RETURN;
+END_IF
+IF bInPosition OR bError THEN
+    lrActVelo := 0.0;
+    RETURN;
+END_IF
+
+lrDist := lrTarget - lrActPos;
+IF lrDist >= 0.0 THEN
+    lrDir := 1.0;
+ELSE
+    lrDir := -1.0;
+END_IF
+
+// Fastest speed from which the axis can still stop at the target.
+lrVmax := MIN(lrVelocity, SQRT(2.0 * lrAccel * ABS(lrDist)));
+IF lrActVelo < lrDir * lrVmax THEN
+    lrActVelo := MIN(lrActVelo + lrAccel * lrCycleTime, lrDir * lrVmax);
+ELSE
+    lrActVelo := MAX(lrActVelo - lrAccel * lrCycleTime, lrDir * lrVmax);
+END_IF
+
+lrStep := lrActVelo * lrCycleTime;
+IF ABS(lrDist - lrStep) <= lrTolerance * 0.5 OR lrDir * (lrDist - lrStep) < 0.0 THEN
+    lrActPos    := lrTarget;   // arrived (or would overshoot): snap and stop
+    lrActVelo   := 0.0;
+    bInPosition := TRUE;
+ELSE
+    lrActPos := lrActPos + lrStep;
+END_IF
+
+lrMoveTime := lrMoveTime + lrCycleTime;
+IF NOT bInPosition AND lrMoveTime > lrMoveTimeout THEN
+    bError    := TRUE;
+    lrActVelo := 0.0;
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

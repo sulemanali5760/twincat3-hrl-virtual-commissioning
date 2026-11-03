@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="E_ZoneState" Id="{97dae84d-b761-42d0-ac67-f581d15f3c73}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE E_ZoneState :
+(
+    eEmpty      := 0,
+    eReceiving  := 1,   // motor on, pallet running in
+    eOccupied   := 2,   // pallet at the end light barrier, motor off
+    eDelivering := 3,   // motor on, pallet running out to the next zone
+    eFault      := 4    // jam (light barrier not reached in time) or drive fault
+) DINT;
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

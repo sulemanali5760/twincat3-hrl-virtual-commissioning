@@ -1,0 +1,42 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_IPoint" Id="{8a20d47d-1ec7-40f3-9129-99af87f88975}" SpecialFunc="None">
+    <Declaration><![CDATA[// FB_IPoint - identification point (I-Punkt) in front of the warehouse: the
+// contour check light barriers and the barcode reader decide whether a pallet
+// may go into the rack. Every pallet that is stored has passed this check.
+FUNCTION_BLOCK FB_IPoint
+VAR_INPUT
+    bOverhangFront : BOOL;   // light barriers: TRUE = goods stick out
+    bOverhangBack  : BOOL;
+    bOverhangLeft  : BOOL;
+    bOverhangRight : BOOL;
+    bTooHigh       : BOOL;
+    sBarcode       : STRING(20);   // empty = no read
+END_VAR
+VAR_OUTPUT
+    nChecked : DINT;
+    nNio     : DINT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name="Check" Id="{269b14bc-9a12-4a2c-a27d-4e8b1c9585b0}">
+      <Declaration><![CDATA[METHOD PUBLIC Check : E_IPointResult
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[nChecked := nChecked + 1;
+IF bOverhangFront OR bOverhangBack OR bOverhangLeft OR bOverhangRight OR bTooHigh THEN
+    Check := E_IPointResult.eNioContour;
+ELSIF sBarcode = '' THEN
+    Check := E_IPointResult.eNioNoRead;
+ELSE
+    Check := E_IPointResult.eOk;
+END_IF
+IF Check <> E_IPointResult.eOk THEN
+    nNio := nNio + 1;
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

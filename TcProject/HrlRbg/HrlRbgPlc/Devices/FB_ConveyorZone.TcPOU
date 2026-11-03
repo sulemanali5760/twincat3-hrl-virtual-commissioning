@@ -1,0 +1,128 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_ConveyorZone" Id="{569c705d-a28f-4f95-bb04-b0ae7ea6838a}" SpecialFunc="None">
+    <Declaration><![CDATA[// FB_ConveyorZone - one roller or chain conveyor zone for pallets, as a
+// standard block: every zone of the pre-zone is an instance of this FB and the
+// zones differ only in their parameters (length, speed, jam timeout). That is
+// the "Parametrierung" of a standard library on site.
+//
+// A zone holds at most one pallet. Accept() starts receiving, the end light
+// barrier stops it (eOccupied), Deliver() runs it out until the light barrier
+// is free again. A transport that takes longer than lrJamTimeout is a jam.
+// bSimulate fakes the end light barrier from the pallet position.
+FUNCTION_BLOCK FB_ConveyorZone EXTENDS FB_CyclicNode
+VAR_INPUT
+    lrLength       : LREAL := 1.6;    // zone length up to the end light barrier [m]
+    lrSpeed        : LREAL := 0.2;    // conveyor speed [m/s]
+    lrPalletLength : LREAL := 1.2;    // pallet length in transport direction [m]
+    lrJamTimeout   : LREAL := 20.0;   // simulated seconds per transport before a jam
+    lrCycleTime    : LREAL := 0.01;
+    bSimulate      : BOOL := TRUE;
+    bEndSensor     : BOOL;            // end light barrier (map to the terminal)
+    bDriveFault    : BOOL;
+END_VAR
+VAR_OUTPUT
+    bMotorOn : BOOL;                  // map to the motor contactor / roller drive
+    eState   : E_ZoneState;
+    sLeId    : STRING(20);            // pallet currently in the zone
+END_VAR
+VAR
+    lrPallet    : LREAL;              // simulated position of the pallet front [m]
+    lrStateTime : LREAL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name="Accept" Id="{0444921e-bf80-4d16-baca-f42ec2bec9db}">
+      <Declaration><![CDATA[// Take over a pallet from the previous zone. Only an empty zone accepts.
+METHOD PUBLIC Accept : BOOL
+VAR_INPUT
+    sId : STRING(20);
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF eState <> E_ZoneState.eEmpty OR sId = '' THEN
+    Accept := FALSE;
+    RETURN;
+END_IF
+sLeId       := sId;
+lrPallet    := 0.0;
+lrStateTime := 0.0;
+eState      := E_ZoneState.eReceiving;
+Accept      := TRUE;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Deliver" Id="{d29a6c55-8f24-4c35-9ded-e427f9725871}">
+      <Declaration><![CDATA[// Run the pallet out. eBusy until the zone is empty again (= eDone),
+// eError on a fault. An empty zone has nothing to deliver and reports eDone.
+METHOD PUBLIC Deliver : E_CmdResult
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF eState = E_ZoneState.eOccupied THEN
+    eState      := E_ZoneState.eDelivering;
+    lrStateTime := 0.0;
+END_IF
+CASE eState OF
+    E_ZoneState.eEmpty:  Deliver := E_CmdResult.eDone;
+    E_ZoneState.eFault:  Deliver := E_CmdResult.eError;
+ELSE
+    Deliver := E_CmdResult.eBusy;
+END_CASE]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Reset" Id="{253dc3d5-3fef-4cbf-8a94-f42b4fea69d6}">
+      <Declaration><![CDATA[// After clearing a jam on site: the zone is empty again.
+METHOD PUBLIC Reset
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[eState      := E_ZoneState.eEmpty;
+sLeId       := '';
+lrPallet    := 0.0;
+lrStateTime := 0.0;
+bMotorOn    := FALSE;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="OnCyclic" Id="{8666ddb3-46c9-4335-871a-a590ad59ec43}">
+      <Declaration><![CDATA[METHOD PROTECTED OnCyclic
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[bMotorOn := eState = E_ZoneState.eReceiving OR eState = E_ZoneState.eDelivering;
+
+IF bMotorOn THEN
+    IF bDriveFault THEN
+        eState := E_ZoneState.eFault;
+    ELSE
+        lrStateTime := lrStateTime + lrCycleTime;
+        IF lrStateTime > lrJamTimeout THEN
+            eState := E_ZoneState.eFault;   // light barrier not reached / not freed in time
+        END_IF
+    END_IF
+END_IF
+
+IF bSimulate THEN
+    IF eState = E_ZoneState.eReceiving OR eState = E_ZoneState.eDelivering THEN
+        lrPallet := lrPallet + lrSpeed * lrCycleTime;
+    END_IF
+    bEndSensor := eState <> E_ZoneState.eEmpty AND eState <> E_ZoneState.eFault
+                  AND lrPallet >= lrLength AND lrPallet < lrLength + lrPalletLength;
+END_IF
+
+CASE eState OF
+    E_ZoneState.eReceiving:
+        IF bEndSensor THEN
+            eState := E_ZoneState.eOccupied;
+        END_IF
+    E_ZoneState.eDelivering:
+        IF NOT bEndSensor THEN
+            eState := E_ZoneState.eEmpty;   // pallet has left the zone
+            sLeId  := '';
+        END_IF
+END_CASE
+
+bMotorOn := eState = E_ZoneState.eReceiving OR eState = E_ZoneState.eDelivering;]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

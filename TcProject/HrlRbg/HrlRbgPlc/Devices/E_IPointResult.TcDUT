@@ -1,0 +1,14 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="E_IPointResult" Id="{afe899a6-3ce8-4d74-8081-2fece0468de0}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE E_IPointResult :
+(
+    eOk         := 0,   // contour fine, barcode read -> may be stored
+    eNioContour := 1,   // overhang or too high -> back to the operator
+    eNioNoRead  := 2    // barcode not readable -> back to the operator
+) DINT;
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>
