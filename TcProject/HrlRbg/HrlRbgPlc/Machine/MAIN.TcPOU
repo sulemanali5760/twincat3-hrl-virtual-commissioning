@@ -1,0 +1,24 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="MAIN" Id="{b8e037f9-eaed-4553-9535-9f4c633c54c9}" SpecialFunc="None">
+    <Declaration><![CDATA[// MAIN - builds the plant, starts it in automatic and lets the MFR emulator
+// drive it. Watch fbPlant.fbSrm (positions, jobs) and fbPlant.fbRack online.
+PROGRAM MAIN
+VAR
+    fbPlant    : FB_Hrl(ipParent := 0, sNodeName := 'HRL');
+    fbOpMode   : FB_OpModeHandler;
+    fbEmulator : FB_MfrEmulator;
+    bInit      : BOOL := TRUE;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF bInit THEN
+    fbOpMode.SetRoot(fbPlant);
+    fbOpMode.Mode := E_OpMode.eAutomatic;
+    bInit := FALSE;
+END_IF
+
+fbEmulator.Run(fbPlant);
+fbOpMode.Cyclic();]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

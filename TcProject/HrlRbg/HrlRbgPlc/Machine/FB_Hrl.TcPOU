@@ -1,0 +1,86 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_Hrl" Id="{8b101ed3-d0e1-44fa-8906-694294c7c611}" SpecialFunc="None">
+    <Declaration><![CDATA[// FB_Hrl - the whole practice plant as the root mode node: one aisle with one
+// RBG, the rack, the pre-zone with I-point and in-feed/out-feed conveyors, and
+// the MFR interface.
+// Pre-zone flow: in-feed (pallet already checked at the I-point) -> transfer
+// station -> RBG stores it. Retrieved pallets are put on the station and leave
+// over the out-feed.
+FUNCTION_BLOCK FB_Hrl EXTENDS FB_ModeNode
+VAR
+    fbRack    : FB_Rack;
+    fbSrm     : FB_Srm(ipParent := THIS^, sNodeName := 'RBG01');
+    fbInfeed  : FB_ConveyorZone(ipParent := THIS^, sNodeName := 'Infeed');
+    fbOutfeed : FB_ConveyorZone(ipParent := THIS^, sNodeName := 'Outfeed');
+    fbIPoint  : FB_IPoint;
+    fbMfr     : FB_MfrInterface;
+    bInitDone : BOOL;
+    nInStep   : INT;
+    sMovingLe : STRING(20);
+END_VAR
+VAR_OUTPUT
+    bStationOutbound : BOOL;   // pallet on the station is leaving (retrieved), not arriving
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name="OnCyclic" Id="{6e601098-e9b4-4401-8f54-1716c269968e}">
+      <Declaration><![CDATA[METHOD PROTECTED OnCyclic
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF NOT bInitDone THEN
+    fbSrm.Init(fbRack);
+    fbMfr.Init(fbRack, fbSrm);
+    fbOutfeed.lrLength := 2.4;   // same standard block, other parameters
+    bInitDone := TRUE;
+END_IF
+SUPER^.OnCyclic();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="RunAutomatic" Id="{10d74ef1-ca39-4c08-9fa9-d5ebb774ba3d}">
+      <Declaration><![CDATA[METHOD PROTECTED RunAutomatic
+VAR_INPUT
+END_VAR
+VAR
+    stStation : ST_SlotAddr := (nSide := 1, nColumn := 0, nLevel := 1);
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[fbMfr.Cyclic();
+
+// In-feed -> transfer station
+CASE nInStep OF
+    0:  IF fbInfeed.eState = E_ZoneState.eOccupied AND NOT fbRack.IsOccupied(stStation)
+           AND NOT bStationOutbound THEN   // station is reserved for a retrieval
+            sMovingLe := fbInfeed.sLeId;
+            nInStep   := 1;
+        END_IF
+    1:  IF fbInfeed.Deliver() = E_CmdResult.eDone THEN
+            fbRack.Put(stStation, sMovingLe);
+            nInStep := 0;
+        END_IF
+END_CASE
+
+// Transfer station -> out-feed (only pallets the RBG brought out)
+IF bStationOutbound AND fbRack.IsOccupied(stStation)
+   AND fbOutfeed.eState = E_ZoneState.eEmpty THEN
+    fbOutfeed.Accept(fbRack.Take(stStation));
+    bStationOutbound := FALSE;
+END_IF
+IF fbOutfeed.eState = E_ZoneState.eOccupied THEN
+    fbOutfeed.Deliver();   // goods-out takes it away
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="MarkStationOutbound" Id="{88a3f4f0-41da-44c6-9d25-202279366aa0}">
+      <Declaration><![CDATA[// Called when a retrieval to the station is ordered: that pallet leaves.
+METHOD PUBLIC MarkStationOutbound
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[bStationOutbound := TRUE;]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

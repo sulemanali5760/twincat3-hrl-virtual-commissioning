@@ -1,0 +1,114 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_MfrEmulator" Id="{de766654-271f-48f5-bd62-a03b4b606b8f}" SpecialFunc="None">
+    <Declaration><![CDATA[// FB_MfrEmulator - stands in for the material flow computer (WAMAS) so the
+// plant runs on a soft-PLC with nothing connected. It feeds new pallets into
+// the in-feed, orders each one into the rack, and after every third store
+// orders the oldest pallet back out: stores and retrievals alternate like in
+// a real warehouse. It acknowledges every TDON, as the real MFR must.
+// Commissioning only - a real plant gets these telegrams from the MFR.
+FUNCTION_BLOCK FB_MfrEmulator
+VAR_INPUT
+    bEnable : BOOL := TRUE;
+END_VAR
+VAR_OUTPUT
+    nStored    : DINT;
+    nRetrieved : DINT;
+    stLastReply : ST_Telegram;
+END_VAR
+VAR
+    nSeq        : UINT;
+    nOrder      : DINT;
+    nNextLe     : DINT := 1;
+    nSeenOutbox : DINT;
+    aStored     : ARRAY[1..400] OF ST_SlotAddr;   // FIFO of stored places
+    nHead       : DINT := 1;
+    nTail       : DINT := 1;
+    nStoresSinceRetrieve : DINT;
+    bRetrieving : BOOL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name="Run" Id="{47444dbd-b37d-46a8-b220-b8c9b9478d6c}">
+      <Declaration><![CDATA[METHOD PUBLIC Run
+VAR_IN_OUT
+    fbPlant : FB_Hrl;
+END_VAR
+VAR
+    stTel     : ST_Telegram;
+    stStation : ST_SlotAddr := (nSide := 1, nColumn := 0, nLevel := 1);
+    stFree    : ST_SlotAddr;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF NOT bEnable THEN
+    RETURN;
+END_IF
+
+// Acknowledge every TDON the PLC sends.
+IF fbPlant.fbMfr.nOutboxCount <> nSeenOutbox THEN
+    nSeenOutbox := fbPlant.fbMfr.nOutboxCount;
+    IF fbPlant.fbMfr.stOutbox.sType = 'TDON' THEN
+        nSeq := nSeq + 1;
+        stTel.sType  := 'TACK';
+        stTel.nSeq   := nSeq;
+        stTel.nOrder := fbPlant.fbMfr.stOutbox.nOrder;
+        fbPlant.fbMfr.Receive(stTel);
+        IF bRetrieving THEN
+            nRetrieved  := nRetrieved + 1;
+            bRetrieving := FALSE;
+        END_IF
+    END_IF
+END_IF
+
+// Feed a new pallet when the in-feed is empty (pallet assumed checked at the I-point).
+IF fbPlant.fbInfeed.eState = E_ZoneState.eEmpty THEN
+    fbPlant.fbInfeed.Accept(CONCAT('LE', RIGHT(CONCAT('0000', DINT_TO_STRING(nNextLe)), 4)));
+    nNextLe := nNextLe + 1;
+END_IF
+
+IF fbPlant.fbMfr.ActiveOrder <> 0 OR fbPlant.fbMfr.AwaitingAck OR fbPlant.fbSrm.bBusy THEN
+    RETURN;   // one order at a time
+END_IF
+
+IF nStoresSinceRetrieve >= 3 AND nTail > nHead AND NOT bRetrieving
+   AND NOT fbPlant.fbRack.IsOccupied(stStation) THEN
+    // retrieve the oldest pallet to the station
+    nSeq   := nSeq + 1;
+    nOrder := nOrder + 1;
+    stTel.sType    := 'TORD';
+    stTel.nSeq     := nSeq;
+    stTel.nOrder   := nOrder;
+    stTel.stSource := aStored[nHead];
+    stTel.stTarget := stStation;
+    stTel.sLeId    := fbPlant.fbRack.LeIdAt(aStored[nHead]);
+    stLastReply := fbPlant.fbMfr.Receive(stTel);
+    IF stLastReply.sType = 'TACK' THEN
+        nHead := nHead + 1;
+        bRetrieving := TRUE;
+        nStoresSinceRetrieve := 0;
+        fbPlant.MarkStationOutbound();
+    END_IF
+ELSIF fbPlant.fbRack.IsOccupied(stStation) AND NOT fbPlant.bStationOutbound
+      AND fbPlant.fbRack.FindFree(stFree) AND nTail <= 400 THEN
+    // store the pallet waiting on the station
+    nSeq   := nSeq + 1;
+    nOrder := nOrder + 1;
+    stTel.sType    := 'TORD';
+    stTel.nSeq     := nSeq;
+    stTel.nOrder   := nOrder;
+    stTel.stSource := stStation;
+    stTel.stTarget := stFree;
+    stTel.sLeId    := fbPlant.fbRack.LeIdAt(stStation);
+    stLastReply := fbPlant.fbMfr.Receive(stTel);
+    IF stLastReply.sType = 'TACK' THEN
+        aStored[nTail] := stFree;
+        nTail   := nTail + 1;
+        nStored := nStored + 1;
+        nStoresSinceRetrieve := nStoresSinceRetrieve + 1;
+    END_IF
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>
