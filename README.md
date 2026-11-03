@@ -81,6 +81,7 @@ the nearest places in this rack are column 4 / level 6 and column 13 / level 2.
 | Pick or deposit (fork out, lift/lower, fork in) | 6.37 s |
 | Moves station → P1 → P2 → station | 6.43 s + 9.17 s + 11.27 s |
 | **Calculated double cycle** | **52.4 s ≈ 69 double cycles per hour** |
+| **Measured on the soft-PLC** | **51.9 s ≈ 69 double cycles per hour** |
 
 The test `DoubleCycle_MatchesTheFem9851Calculation` runs the same two jobs on the
 simulated RBG and requires the measured time to be within 5 % of the calculation.
@@ -104,7 +105,7 @@ Paths relative to `TcProject/HrlRbg/HrlRbgPlc/`.
 
 37 unit tests with [TcUnit](https://tcunit.org), in 7 suites. Every test runs its
 scenario to the end inside one PLC cycle in simulated time, so the suite finishes
-in about a second.
+in about a second. All 37 pass on TwinCAT 3.1.4026 (x64 soft-PLC).
 
 | Suite | What it pins down |
 |---|---|

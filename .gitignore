@@ -9,3 +9,7 @@ _Libraries/
 
 # IDE
 .vs/
+
+# Machine-specific: licence and XAE lock files
+*.tclrs
+*.~u
