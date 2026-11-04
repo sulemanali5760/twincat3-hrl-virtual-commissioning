@@ -28,8 +28,9 @@ travel drive mid-job. (Source: `docs/index.html`.)
 6. After every third store, the emulator orders the oldest pallet back out. The station is held free for it, the RBG brings the pallet to the station, and the out-feed takes it away.
 
 Every axis simulates itself with a real speed/acceleration profile, so the times
-are realistic: one store or retrieval takes about 25–40 s, a FEM 9.851 double
-cycle about 52 s.
+are realistic: one store or retrieval is one move plus 2 × 6.37 s of handling,
+about 16–27 s depending on how far the place is from the station; a FEM 9.851
+double cycle about 52 s.
 
 ## The plant
 
