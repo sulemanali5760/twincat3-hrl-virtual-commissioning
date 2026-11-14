@@ -6,7 +6,7 @@
 // bring it back to the station. P1 and P2 are the reference places given as
 // coordinates relative to the transfer station.
 // FEM 9.851 places them at P1 = (1/5 L, 2/3 H) and P2 = (2/3 L, 1/5 H)
-// (rack length L, rack height H) - see F_Fem9851Points.
+// (rack length L, rack height H) - see FB_Srm_Test.DoubleCycle_MatchesTheFem9851Calculation.
 FUNCTION F_DoubleCycleTime : LREAL
 VAR_INPUT
     lrX1, lrY1 : LREAL;   // P1 relative to the station [m]

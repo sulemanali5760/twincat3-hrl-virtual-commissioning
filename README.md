@@ -81,7 +81,7 @@ the nearest places in this rack are column 4 / level 6 and column 13 / level 2.
 | Pick or deposit (fork out, lift/lower, fork in) | 6.37 s |
 | Moves station → P1 → P2 → station | 6.43 s + 9.17 s + 11.27 s |
 | **Calculated double cycle** | **52.4 s ≈ 69 double cycles per hour** |
-| **Measured on the soft-PLC** | **51.9 s ≈ 69 double cycles per hour** |
+| Measured on the soft-PLC | 51.9 s (from an earlier run; not yet reproduced, see *What is verified*) |
 
 The test `DoubleCycle_MatchesTheFem9851Calculation` runs the same two jobs on the
 simulated RBG and requires the measured time to be within 5 % of the calculation.
@@ -105,7 +105,7 @@ Paths relative to `TcProject/HrlRbg/HrlRbgPlc/`.
 
 37 unit tests with [TcUnit](https://tcunit.org), in 7 suites. Every test runs its
 scenario to the end inside one PLC cycle in simulated time, so the suite finishes
-in about a second. All 37 pass on TwinCAT 3.1.4026 (x64 soft-PLC).
+in about a second.
 
 | Suite | What it pins down |
 |---|---|
@@ -125,6 +125,22 @@ in about a second. All 37 pass on TwinCAT 3.1.4026 (x64 soft-PLC).
 4. Watch the plant: `MAIN.fbPlant.fbSrm` (positions, jobs), `MAIN.fbEmulator` (stored / retrieved), `MAIN.fbPlant.fbRack`.
 
 Built against TwinCAT 3.1.4026.
+
+## What is verified, and how
+
+- **Compiles**: the whole project, tests included, builds with 0 errors on
+  TwinCAT 3.1.4026.25 with TcUnit 1.3.1 (headless build through the Automation
+  Interface, 14 Nov 2026).
+- **Calculated double cycle**: the 6.37 s / 6.43 s / 9.17 s / 11.27 s / 52.4 s
+  figures above were recomputed outside TwinCAT from the same formulas and rack
+  geometry and agree to 0.01 s.
+- **Framework**: the files in `Framework/` are byte-identical to the
+  [framework repo](https://github.com/sulemanali5760/twincat3-pickplace-framework).
+- **CI** (`.github/check_plc_project.py`): every object file is well-formed,
+  listed in the project, named like its file, and free of a doubled quote inside
+  a string. GitHub cannot run TwinCAT, so CI does not compile or run the tests.
+- **Not yet verified**: running the 37 tests needs a TwinCAT runtime. Until a
+  run is recorded here, the measured 51.9 s and the pass count are not claimed.
 
 ## Honest scope
 
