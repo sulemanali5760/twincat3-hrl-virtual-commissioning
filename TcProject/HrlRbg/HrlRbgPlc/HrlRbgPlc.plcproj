@@ -21,30 +21,6 @@
     <Compile Include="PlcTask.TcTTO">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Framework\E_CmdResult.TcDUT">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="Framework\E_OpMode.TcDUT">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="Framework\GVL_Framework.TcGVL">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="Framework\I_Node.TcIO">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="Framework\FB_CycleManager.TcPOU">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="Framework\FB_CyclicNode.TcPOU">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="Framework\FB_ModeNode.TcPOU">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="Framework\FB_OpModeHandler.TcPOU">
-      <SubType>Code</SubType>
-    </Compile>
     <Compile Include="Rack\GVL_Rack.TcGVL">
       <SubType>Code</SubType>
     </Compile>
@@ -137,7 +113,6 @@
     </Compile>
   </ItemGroup>
   <ItemGroup>
-    <Folder Include="Framework" />
     <Folder Include="Rack" />
     <Folder Include="Devices" />
     <Folder Include="Performance" />
@@ -147,6 +122,10 @@
     <Folder Include="Test" />
   </ItemGroup>
   <ItemGroup>
+    <PlaceholderReference Include="NodeTree">
+      <DefaultResolution>NodeTree, * (sulemanali5760)</DefaultResolution>
+      <Namespace>NodeTree</Namespace>
+    </PlaceholderReference>
     <PlaceholderReference Include="Tc2_Standard">
       <DefaultResolution>Tc2_Standard, * (Beckhoff Automation GmbH)</DefaultResolution>
       <Namespace>Tc2_Standard</Namespace>

@@ -9,7 +9,10 @@ I/O connected.
 It is built on my [node-tree framework](https://github.com/sulemanali5760/twincat3-pickplace-framework)
 (cinnamon-style): the plant is a tree of nodes, one `Cyclic()` on the root runs
 everything, devices expose commands that return `eBusy / eDone / eError`, and
-sequences are a `CASE` over a step manager. The framework is copied unchanged.
+sequences are a `CASE` over a step manager. The framework is referenced as the
+compiled library `NodeTree.library` from the framework repo's
+[releases](https://github.com/sulemanali5760/twincat3-pickplace-framework/releases),
+not copied.
 
 ### ▶ [Watch the plant run in your browser](https://sulemanali5760.github.io/twincat3-hrl-virtual-commissioning/)
 
@@ -92,7 +95,6 @@ Paths relative to `TcProject/HrlRbg/HrlRbgPlc/`.
 
 | Folder | Content |
 |---|---|
-| `Framework/` | the node-tree framework (unchanged copy) |
 | `Rack/` | `FB_Rack`, `ST_SlotAddr`, `ST_Slot`, `GVL_Rack` (geometry) |
 | `Devices/` | `FB_Axis`, `FB_ConveyorZone`, `FB_IPoint` |
 | `Units/` | `FB_Srm` |
@@ -119,7 +121,9 @@ in about a second.
 
 ## Run it
 
-1. Install TcUnit once (download `TcUnit.library` from the [releases page](https://github.com/tcunit/TcUnit/releases), then *PLC → Library Repository → Install*).
+1. Install two libraries once, each with *PLC → Library Repository → Install*:
+   `NodeTree.library` from the [framework releases](https://github.com/sulemanali5760/twincat3-pickplace-framework/releases)
+   and `TcUnit.library` from the [TcUnit releases](https://github.com/tcunit/TcUnit/releases).
 2. Open `TcProject/HrlRbg.sln` in TwinCAT XAE, platform *TwinCAT RT (x64)*.
 3. Build, *Activate Configuration*, Run. `PRG_TEST` runs after `MAIN`; results appear in the Error List after about a second.
 4. Watch the plant: `MAIN.fbPlant.fbSrm` (positions, jobs), `MAIN.fbEmulator` (stored / retrieved), `MAIN.fbPlant.fbRack`.
@@ -134,8 +138,8 @@ Built against TwinCAT 3.1.4026.
 - **Calculated double cycle**: the 6.37 s / 6.43 s / 9.17 s / 11.27 s / 52.4 s
   figures above were recomputed outside TwinCAT from the same formulas and rack
   geometry and agree to 0.01 s.
-- **Framework**: the files in `Framework/` are byte-identical to the
-  [framework repo](https://github.com/sulemanali5760/twincat3-pickplace-framework).
+- **Framework**: comes from `NodeTree.library` 1.0.0; the project compiles
+  against the installed library and fails without it.
 - **CI** (`.github/check_plc_project.py`): every object file is well-formed,
   listed in the project, named like its file, and free of a doubled quote inside
   a string. GitHub cannot run TwinCAT, so CI does not compile or run the tests.
