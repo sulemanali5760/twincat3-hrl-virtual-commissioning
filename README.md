@@ -1,26 +1,62 @@
-# Virtual commissioning of a pallet high-bay warehouse — TwinCAT 3
+# HRL/RBG control library for TwinCAT 3
 
-A storage and retrieval machine (RBG / stacker crane), its rack, the conveyor
-pre-zone and the telegram interface to the material flow computer, written in
-TwinCAT 3 Structured Text and commissioned **virtually**: every part simulates
-its own hardware, so the whole plant runs and is tested on a soft-PLC with no
-I/O connected.
+**PLC control for a pallet high-bay warehouse: storage and retrieval machine (RBG), rack, conveyor
+pre-zone and the telegram interface to the material flow computer, configured per plant instead of
+reprogrammed.**
 
-It is built on my [node-tree framework](https://github.com/sulemanali5760/twincat3-pickplace-framework)
-(cinnamon-style): the plant is a tree of nodes, one `Cyclic()` on the root runs
-everything, devices expose commands that return `eBusy / eDone / eError`, and
-sequences are a `CASE` over a step manager. The framework is referenced as the
-compiled library `NodeTree.library` from the framework repo's
-[releases](https://github.com/sulemanali5760/twincat3-pickplace-framework/releases),
-not copied.
+[![PLC project check](https://github.com/sulemanali5760/twincat3-hrl-virtual-commissioning/actions/workflows/plc-project.yml/badge.svg)](https://github.com/sulemanali5760/twincat3-hrl-virtual-commissioning/actions/workflows/plc-project.yml)
+![TwinCAT](https://img.shields.io/badge/TwinCAT-3.1.4026-0060a9)
+![TcUnit](https://img.shields.io/badge/TcUnit-59%20tests%20passing-2ea44f)
+![NC](https://img.shields.io/badge/motion-Tc2__MC2%20NC%20PTP-555)
+![HMI](https://img.shields.io/badge/HMI-TE2000-555)
+![License](https://img.shields.io/badge/license-MIT-blue)
+
+The same Structured Text runs on simulated axes for virtual commissioning and on Beckhoff NC axes for
+the machine; rack size, axis data, conveyors, MFR link and telegram layout come from one JSON file.
+Every function block is covered by TcUnit tests that run on the soft-PLC.
+
+| | |
+|---|---|
+| **Motion** | `I_Axis` with two implementations: simulated trapezoid profile (`FB_Axis`) and NC PTP (`FB_AxisNc`, MC_Power / MC_MoveAbsolute / MC_Halt) |
+| **Configuration** | `HrlConfig.json` from the boot folder (Tc3_JsonXml): rack up to 2 × 60 × 16 places, axes, conveyors, MFR, safety mode; range-checked, rejected as a whole if invalid |
+| **MFR interface** | WAMAS-style telegrams (TORD / TACK / TERR / TDON) checked before anything moves; TCP server (Tc2_TcpIp) with configurable fixed-length layout; in-PLC emulator for commissioning |
+| **Operation** | automatic, manual jog with fork interlock, homing, stop with resume; guided teach-in with tolerance check |
+| **Diagnostics** | fault list with cause and remedy, logged once per edge to the TwinCAT logger |
+| **Safety (standard side)** | drive enable, restart lock after every safety drop, door unlock at standstill; TwinSAFE template and EN 528 / EN ISO 13849 checklist in [docs/safety](docs/safety/README.md) |
+| **HMI** | TwinCAT HMI (TE2000) operator page bound to one interface GVL |
+| **Proof** | 59 TcUnit tests (12 suites) incl. NC axes; FEM 9.851 double cycle measured 51.91 s vs 52.4 s calculated |
+
+```mermaid
+flowchart LR
+    CFG[HrlConfig.json] --> HRL
+    MFR[Material flow computer] <-- TCP telegrams --> LINK[FB_MfrLinkTcp + codec]
+    LINK <--> IF[FB_MfrInterface]
+    HMI[TwinCAT HMI] <--> GVL[GVL_Hmi] <--> BR[FB_HmiBridge]
+    SAFE[Safety controller] --> SI[FB_SafetyInterface]
+    subgraph HRL[FB_Hrl - plant]
+      IF --> SRM[FB_Srm RBG]
+      SRM --> AX{{I_Axis}}
+      AX --> SIM[FB_Axis sim]
+      AX --> NC[FB_AxisNc NC PTP]
+      SRM --> RACK[FB_Rack]
+      CONV[FB_ConveyorZone x n] --> RACK
+      TEACH[FB_TeachIn] --> SRM
+      DIAG[FB_Diag]
+      SI
+    end
+    BR --> HRL
+```
+
+It is built on my [NodeTree framework](https://github.com/sulemanali5760/twincat3-pickplace-framework):
+the plant is a tree of nodes, one `Cyclic()` on the root runs everything, devices expose commands
+that return `eBusy / eDone / eError`, and sequences are a `CASE` over a step manager. The framework is
+referenced as the compiled library `NodeTree.library`, not copied.
 
 ### ▶ [Watch the plant run in your browser](https://sulemanali5760.github.io/twincat3-hrl-virtual-commissioning/)
 
-No TwinCAT needed. The page is a JavaScript port of the same logic: the RBG
-stores and retrieves pallets, the telegram log shows every order and answer,
-and buttons send the faulty telegrams from the interface test or fail the
-travel drive mid-job. (Source: `docs/index.html`.)
-
+No TwinCAT needed. The page is a JavaScript port of the RBG and MFR logic: the RBG stores and
+retrieves pallets, the telegram log shows every order and answer, and buttons send the faulty
+telegrams from the interface test or fail the travel drive mid-job. (Source: `docs/index.html`.)
 ## What happens, in plain words
 
 1. A pallet arrives on the **in-feed** conveyor and passes the **I-point** (contour and barcode check). It stops on the **transfer station** in front of the aisle.
@@ -30,7 +66,7 @@ travel drive mid-job. (Source: `docs/index.html`.)
 5. When the fork is back in the middle, the PLC reports `TDON`. The material flow computer must acknowledge with `TACK` within 5 s, otherwise the PLC raises status 30.
 6. After every third store, the emulator orders the oldest pallet back out. The station is held free for it, the RBG brings the pallet to the station, and the out-feed takes it away.
 
-Every axis simulates itself with a real speed/acceleration profile, so the times
+In simulation every axis follows a real speed/acceleration profile, so the times
 are realistic: one store or retrieval takes about 25–40 s, a FEM 9.851 double
 cycle about 52 s.
 
@@ -89,7 +125,7 @@ the nearest places in this rack are column 4 / level 6 and column 13 / level 2.
 The test `DoubleCycle_MatchesTheFem9851Calculation` runs the same two jobs on the
 simulated RBG and requires the measured time to be within 5 % of the calculation.
 
-## From demo to library: what an integrator configures
+## Configuration: what an integrator sets per plant
 
 The plant is built from `HrlConfig.json` in the TwinCAT boot folder
 (`C:\ProgramData\Beckhoff\TwinCAT\3.1\Boot\` on 4026). Without the file the
@@ -194,7 +230,7 @@ Built against TwinCAT 3.1.4026.
   listed in the project, named like its file. GitHub cannot run TwinCAT, so CI
   does not compile or run the tests.
 
-## Honest scope
+## Scope and limits
 
 - **Not run on real hardware.** Axes run in NC simulation, light barriers and the MFR are simulated.
 - **TCP link to a real MFR**: built and its logic tested (codec, answers over a link double); the socket
