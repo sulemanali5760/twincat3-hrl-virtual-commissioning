@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>HRL Virtual Commissioning</title>
+<title>HRL/RBG control library</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -78,9 +78,9 @@ td.n{font-family:var(--mono);font-variant-numeric:tabular-nums}
 <div class="wrap">
   <header>
     <div>
-      <div class="tag">TwinCAT 3 · Structured Text · simulated plant</div>
-      <h1>HRL Virtual Commissioning</h1>
-      <p class="sub">A pallet high-bay warehouse with one storage and retrieval machine, run by the same logic as the PLC program: axis profiles, the eight-step single cycle, and telegram checks against an emulated material flow computer.</p>
+      <div class="tag">TwinCAT 3 library · live demo of the core logic</div>
+      <h1>HRL/RBG control library</h1>
+      <p class="sub">A pallet high-bay warehouse with one storage and retrieval machine. This page runs the core of the PLC library in your browser: axis profiles, the eight-step single cycle, rack booking, and telegram checks against an emulated material flow computer.</p>
     </div>
     <a href="https://github.com/sulemanali5760/twincat3-hrl-virtual-commissioning">Source on GitHub</a>
   </header>
@@ -144,15 +144,19 @@ td.n{font-family:var(--mono);font-variant-numeric:tabular-nums}
     <section>
       <h2>How the PLC program is built</h2>
       <p>The plant is a tree of nodes. One <code>Cyclic()</code> call on the root runs every node, and each device returns <code>eBusy</code>, <code>eDone</code> or <code>eError</code> to the sequence that commands it.</p>
-<pre>FB_Hrl                    root mode node
-├─ FB_Srm  RBG01          single-cycle sequence
-│  ├─ FB_Axis  Travel     simulated trapezoid profile, laser value
-│  ├─ FB_Axis  Hoist
-│  └─ FB_Axis  Fork
+<pre>FB_Hrl                    root mode node, built from HrlConfig.json
+├─ FB_Srm  RBG01          single cycle, manual jog, homing, stop
+│  └─ I_Axis ×3           FB_Axis (simulated profile) or FB_AxisNc (NC PTP)
 ├─ FB_ConveyorZone  Infeed    one standard block,
 └─ FB_ConveyorZone  Outfeed   different parameters
-FB_Rack           which place holds which pallet, teach-in
-FB_MfrInterface   checks every telegram before anything moves</pre>
+FB_Rack             which place holds which pallet, size from the config
+FB_MfrInterface     checks every telegram before anything moves
+FB_MfrLinkTcp       TCP server to the real MFR, fixed-length telegram codec
+FB_TeachIn          guided teach-in with tolerance check
+FB_Diag             fault list: cause and remedy
+FB_SafetyInterface  drive enable and restart lock from the safety controller
+FB_HmiBridge        TwinCAT HMI operator page</pre>
+      <p>This page runs the crane with simulated axes, the conveyors, the rack and the telegram checks. Configuration, NC axes, the TCP link, teach-in, the safety interface and the HMI are in the TwinCAT project.</p>
     </section>
     <section>
       <h2>One RBG job, step by step</h2>
@@ -189,8 +193,8 @@ FB_MfrInterface   checks every telegram before anything moves</pre>
       <p>FEM 9.851 measures an RBG by its double cycle: store at P1 (1/5 of the rack length, 2/3 of its height), travel empty to P2 (2/3 length, 1/5 height), retrieve there, return to the station. With travel 3.0 m/s, hoist 1.5 m/s and a 1.10 m fork, the calculation gives <strong>52.4 s, about 69 double cycles per hour</strong>. A unit test runs the same two jobs on the simulated RBG and requires the measured time to stay within 5 % of that figure.</p>
     </section>
     <section>
-      <h2>What this is not</h2>
-      <p>Everything here is simulated: axes, light barriers and the material flow computer. The PROFINET network, the safety program and the HMI belong to the real plant and are not part of this model. This page is a JavaScript port of the PLC logic for viewing. The TwinCAT project in the repository is the actual program, with 37 TcUnit tests.</p>
+      <h2>What this page is, and is not</h2>
+      <p>This page is a JavaScript port of the core PLC logic for viewing; everything on it is simulated. The TwinCAT project in the repository is the actual program: configurable from a JSON file, on simulated or NC axes, with a TCP link to the material flow computer, teach-in, diagnostics, a safety interface and a TwinCAT HMI page, covered by 59 TcUnit tests that run on the soft-PLC. It has not run on real hardware; the safety function itself belongs in a safety controller.</p>
     </section>
   </div>
 </div>
