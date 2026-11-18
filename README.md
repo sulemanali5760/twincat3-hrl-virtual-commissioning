@@ -4,7 +4,7 @@
 pre-zone and the telegram interface to the material flow computer, configured per plant instead of
 reprogrammed.**
 
-[![PLC project check](https://github.com/sulemanali5760/twincat3-hrl-virtual-commissioning/actions/workflows/plc-project.yml/badge.svg)](https://github.com/sulemanali5760/twincat3-hrl-virtual-commissioning/actions/workflows/plc-project.yml)
+[![PLC project check](https://github.com/sulemanali5760/twincat3-hrl-rbg-library/actions/workflows/plc-project.yml/badge.svg)](https://github.com/sulemanali5760/twincat3-hrl-rbg-library/actions/workflows/plc-project.yml)
 ![TwinCAT](https://img.shields.io/badge/TwinCAT-3.1.4026-0060a9)
 ![TcUnit](https://img.shields.io/badge/TcUnit-59%20tests%20passing-2ea44f)
 ![NC](https://img.shields.io/badge/motion-Tc2__MC2%20NC%20PTP-555)
@@ -52,7 +52,7 @@ the plant is a tree of nodes, one `Cyclic()` on the root runs everything, device
 that return `eBusy / eDone / eError`, and sequences are a `CASE` over a step manager. The framework is
 referenced as the compiled library `NodeTree.library`, not copied.
 
-### ▶ [Watch the plant run in your browser](https://sulemanali5760.github.io/twincat3-hrl-virtual-commissioning/)
+### ▶ [Watch the plant run in your browser](https://sulemanali5760.github.io/twincat3-hrl-rbg-library/)
 
 No TwinCAT needed. The page is a JavaScript port of the RBG and MFR logic: the RBG stores and
 retrieves pallets, the telegram log shows every order and answer, and buttons send the faulty
