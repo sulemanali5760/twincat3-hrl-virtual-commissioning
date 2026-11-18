@@ -1,0 +1,40 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <Itf Name="I_Axis" Id="{9b28e949-89ed-5419-a7f0-9a6bdce1367e}">
+    <Declaration><![CDATA[// I_Axis - what the RBG sequence needs from a positioning axis, whatever
+// drives it: the simulated FB_Axis or the NC axis FB_AxisNc. Units are metres.
+INTERFACE I_Axis]]></Declaration>
+    <Method Name="MoveAbs" Id="{dd794198-a322-f627-73c3-ee0aa6a0c16f}">
+      <Declaration><![CDATA[// Drive to an absolute position: eBusy while moving, eDone in position, eError on a fault.
+METHOD MoveAbs : E_CmdResult
+VAR_INPUT
+    lrPos : LREAL;   // target [m]
+END_VAR]]></Declaration>
+    </Method>
+    <Method Name="Reset" Id="{d3d6b18d-834b-8472-c693-07475f06f462}">
+      <Declaration><![CDATA[// Acknowledge a fault: the axis stops where it is and waits for a new target.
+METHOD Reset
+VAR_INPUT
+END_VAR]]></Declaration>
+    </Method>
+    <Method Name="Halt" Id="{b74cdb8b-123b-8062-9273-8f6dca2dddd3}">
+      <Declaration><![CDATA[// Stop now (end of a jog, stop mode). The axis then waits for a new target.
+METHOD Halt
+VAR_INPUT
+END_VAR]]></Declaration>
+    </Method>
+    <Property Name="ActPos" Id="{b3a11f7d-a42f-8622-f90c-767f67eecf59}">
+      <Declaration><![CDATA[// Actual position [m].
+PROPERTY ActPos : LREAL]]></Declaration>
+      <Get Name="Get" Id="{73ab3f9e-b2ff-23b8-ea5a-12563a4a9198}">
+        <Declaration><![CDATA[]]></Declaration>
+      </Get>
+    </Property>
+    <Property Name="Error" Id="{1f9964c6-7b7f-7b69-ab3a-ac49e291e8e6}">
+      <Declaration><![CDATA[PROPERTY Error : BOOL]]></Declaration>
+      <Get Name="Get" Id="{7cc6907c-8455-c086-fdb3-a496d367986f}">
+        <Declaration><![CDATA[]]></Declaration>
+      </Get>
+    </Property>
+  </Itf>
+</TcPlcObject>

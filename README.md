@@ -89,34 +89,78 @@ the nearest places in this rack are column 4 / level 6 and column 13 / level 2.
 The test `DoubleCycle_MatchesTheFem9851Calculation` runs the same two jobs on the
 simulated RBG and requires the measured time to be within 5 % of the calculation.
 
+## From demo to library: what an integrator configures
+
+The plant is built from `HrlConfig.json` in the TwinCAT boot folder
+(`C:\ProgramData\Beckhoff\TwinCAT\3.1\Boot\` on 4026). Without the file the
+practice plant above runs. Example with every key: [`config/HrlConfig.json`](config/HrlConfig.json).
+
+| Key | What it sets |
+|---|---|
+| `rack` | sides, columns, levels (up to 2 × 60 × 16), pitches, offsets, fork and lift stroke, teach tolerance |
+| `axes.kind` | `sim` = simulated axes, `nc` = Beckhoff NC axes (Tc2_MC2): the same RBG code drives either |
+| `axes.travel/hoist/fork` | velocity and acceleration per axis |
+| `conveyors.infeed/outfeed` | zone length, speed, jam time, `simulate` or real light barrier |
+| `mfr.link` | `emulator` (in-PLC MFR) or `tcp`: the PLC is a TCP server on `mfr.port` |
+| `mfr.layout` | field widths of the fixed-length telegram (STX + fields + ETX) |
+| `safety.simulate` | bench only; `false` on a real machine (see [docs/safety](docs/safety/README.md)) |
+
+A file that does not parse or holds a value out of range is rejected as a whole;
+the defaults stay and the fault list says why.
+
+**Operation and commissioning**: manual mode jogs one axis while a button is held
+(travel and hoist only with the fork centred); guided teach-in drives to a place's
+nominal position, the operator fine-tunes and confirms, a position further than the
+tolerance from the drawing is refused; stop mode halts every axis and the job resumes
+in automatic. Faults are written once to the TwinCAT logger with cause and remedy and
+kept in an active list for the HMI.
+
+**HMI**: `TcProject/HrlHmi` (TwinCAT HMI, TE2000 14.19). It only uses `GVL_Hmi`
+(`stStatus`, `stCommand`), mapped with `{attribute 'TcHmiSymbol.AddSymbol'}`;
+`FB_HmiBridge` connects it to the plant. One page: status, operating mode, safety
+acknowledge, jog, teach-in, active faults. In *TwinCAT HMI Configuration > Server Symbols > All Symbols*,
+map `GVL_Hmi.stStatus` and `GVL_Hmi.stCommand` (right-click > Map Symbol) if they are not listed under
+Mapped Symbols; the page binds to `ADS.PLC1.GVL_Hmi.*`.
+
 ## Files
 
 Paths relative to `TcProject/HrlRbg/HrlRbgPlc/`.
 
 | Folder | Content |
 |---|---|
-| `Rack/` | `FB_Rack`, `ST_SlotAddr`, `ST_Slot`, `GVL_Rack` (geometry) |
-| `Devices/` | `FB_Axis`, `FB_ConveyorZone`, `FB_IPoint` |
-| `Units/` | `FB_Srm` |
-| `Mfr/` | `FB_MfrInterface`, `ST_Telegram`, `GVL_Mfr` |
+| `Rack/` | `FB_Rack` (size from config), `ST_SlotAddr`, `ST_Slot`, `GVL_Rack` (defaults and maximum sizes) |
+| `Devices/` | `I_Axis`, `FB_Axis` (simulated), `FB_AxisNc` (NC), `FB_ConveyorZone`, `FB_IPoint` |
+| `Units/` | `FB_Srm` (automatic, manual jog, homing, stop) |
+| `Config/` | `ST_HrlConfig` and parts, `FB_HrlConfig` (file + JSON + range check) |
+| `Mfr/` | `FB_MfrInterface`, `I_MfrLink`, `FB_MfrLinkTcp`, `FB_TelegramCodec`, `ST_Telegram`, `GVL_Mfr` |
+| `Commissioning/` | `FB_TeachIn` |
+| `Diag/` | `FB_Diag`, `E_Fault` |
+| `Safety/` | `FB_SafetyInterface`, `ST_SafetyStatus` |
+| `Hmi/` | `GVL_Hmi`, `ST_HmiStatus`, `ST_HmiCommand`, `FB_HmiBridge` |
 | `Performance/` | travel-time and double-cycle functions |
 | `Machine/` | `FB_Hrl`, `FB_MfrEmulator`, `MAIN` |
 | `Test/` | TcUnit suites, `PRG_TEST` |
 
 ## Tests
 
-37 unit tests with [TcUnit](https://tcunit.org), in 7 suites. Every test runs its
-scenario to the end inside one PLC cycle in simulated time, so the suite finishes
-in about a second. All 37 pass on TwinCAT 3.1.4026.25 (x64 soft-PLC, run of 14 Nov 2026).
+59 unit tests with [TcUnit](https://tcunit.org) in 12 suites. Most run their
+scenario inside one PLC cycle in simulated time; the two NC tests move real NC
+axes (in simulation) and take about 30 s. All 59 pass on TwinCAT 3.1.4026.25
+(x64 soft-PLC, run of 18 Nov 2026).
 
 | Suite | What it pins down |
 |---|---|
 | `FB_Rack_Test` (7) | geometry, teach-in accepted / rejected, booking in and out, no double booking, invalid addresses, next free place |
 | `FB_Axis_Test` (5) | arrives in tolerance, trapezoid and triangle move times, drive fault fails the move, reset |
+| `FB_AxisNc_Test` (2) | NC axis reaches its target; a whole store job on three NC axes |
 | `FB_ConveyorZone_Test` (4) | runs to the light barrier in the right time, one pallet per zone, delivers, jam |
 | `FB_IPoint_Test` (3) | OK, overhang, no read |
 | `FB_MfrInterface_Test` (10) | the interface test cases: valid order, wrong sequence, duplicate, target occupied, source empty, wrong load unit, invalid address, busy, TDON + ack timeout, TACK |
+| `FB_TelegramCodec_Test` (7) | wire format, round trip, wrong length, letter in a number field, custom layout, answer over a link, bad frame answered with TERR 45 |
+| `FB_HrlConfig_Test` (5) | valid file, value out of range rejected whole, empty object = defaults, not JSON, a 10 × 4 rack from config |
 | `FB_Srm_Test` (5) | store job, retrieve job, refused job, travel fault mid-job keeps the pallet booked, FEM 9.851 double cycle |
+| `FB_Operation_Test` (5) | jog while held, jog blocked with the fork out, teach-in stored / refused, stop and resume, fault raised once per edge |
+| `FB_SafetyInterface_Test` (3) | no enable after power-up without acknowledge, every safety bit drop locks until reset, door unlock only at standstill |
 | `FB_TravelTime_Test` (3) | trapezoid, triangle, zero distance |
 
 ## Run it
@@ -124,9 +168,12 @@ in about a second. All 37 pass on TwinCAT 3.1.4026.25 (x64 soft-PLC, run of 14 N
 1. Install two libraries once, each with *PLC → Library Repository → Install*:
    `NodeTree.library` from the [framework releases](https://github.com/sulemanali5760/twincat3-pickplace-framework/releases)
    and `TcUnit.library` from the [TcUnit releases](https://github.com/tcunit/TcUnit/releases).
-2. Open `TcProject/HrlRbg.sln` in TwinCAT XAE, platform *TwinCAT RT (x64)*.
-3. Build, *Activate Configuration*, Run. `PRG_TEST` runs after `MAIN`; results appear in the Error List after about a second.
-4. Watch the plant: `MAIN.fbPlant.fbSrm` (positions, jobs), `MAIN.fbEmulator` (stored / retrieved), `MAIN.fbPlant.fbRack`.
+2. Open `TcProject/HrlRbg.sln` in TwinCAT XAE, platform *TwinCAT RT (x64)*. The NC axes need a
+   TF5000 licence (7-day trial: *SYSTEM → License → Manage Licenses*).
+3. Optional: copy `config/HrlConfig.json` to the boot folder and edit it.
+4. Build, *Activate Configuration*, Run. `PRG_TEST` runs after `MAIN`.
+5. Headless (no XAE window): `tools/tc_build_test.ps1` builds `HrlRbg.Plc.sln`, activates it on the
+   local runtime and prints the TcUnit result.
 
 Built against TwinCAT 3.1.4026.
 
@@ -134,22 +181,29 @@ Built against TwinCAT 3.1.4026.
 
 - **Compiles**: the whole project, tests included, builds with 0 errors on
   TwinCAT 3.1.4026.25 with TcUnit 1.3.1 (headless build through the Automation
-  Interface, 14 Nov 2026).
+  Interface, 18 Nov 2026).
+- **Tests run**: 59 of 59 pass on the local runtime, read from TcUnit's xUnit
+  result file; the NC tests run on NC simulation axes.
+- **Config file**: a real `HrlConfig.json` was loaded from the boot folder on the
+  runtime (one-off test, not in the suite because it needs the file).
+- **Plant + HMI bridge**: read over ADS on the running PLC: automatic mode, store
+  and retrieve jobs counting up, `GVL_Hmi.stStatus` filled.
 - **Calculated double cycle**: the 6.37 s / 6.43 s / 9.17 s / 11.27 s / 52.4 s
-  figures above were recomputed outside TwinCAT from the same formulas and rack
-  geometry and agree to 0.01 s.
-- **Framework**: comes from `NodeTree.library` 1.0.0; the project compiles
-  against the installed library and fails without it.
+  figures above were recomputed outside TwinCAT and agree to 0.01 s.
 - **CI** (`.github/check_plc_project.py`): every object file is well-formed,
-  listed in the project, named like its file, and free of a doubled quote inside
-  a string. GitHub cannot run TwinCAT, so CI does not compile or run the tests.
-- **Tests run**: 37 of 37 pass on the local TwinCAT 3.1.4026.25 runtime
-  (14 Nov 2026), read from TcUnit's xUnit result file. The double-cycle test
-  measured 51.91 s against 52.36 s calculated. A run with the tolerance
-  tightened on purpose failed exactly that test, so failures do show up.
+  listed in the project, named like its file. GitHub cannot run TwinCAT, so CI
+  does not compile or run the tests.
 
 ## Honest scope
 
-- Everything is simulated: axes, light barriers and the material flow computer. Connecting real hardware means setting `bSimulate := FALSE` and mapping the I/O.
-- The PROFINET network, the safety program (emergency stop, aisle door per EN 528) and the HMI are not part of this TwinCAT project.
+- **Not run on real hardware.** Axes run in NC simulation, light barriers and the MFR are simulated.
+- **TCP link to a real MFR**: built and its logic tested (codec, answers over a link double); the socket
+  itself has not talked to a client yet (needs a TF6310 licence).
+- **Safety is a template**: the standard-PLC side is implemented and tested, the safety function itself
+  belongs in a safety controller and must be validated per machine ([docs/safety](docs/safety/README.md)).
+- **HMI**: one operator page; checked in the TwinCAT HMI Live-View against the running PLC (values update,
+  defaults from the PLC appear in the inputs). Button actions were not clicked through in that check.
+- **Teach-in positions are not saved yet** and are lost on a restart.
+- **Diagnostics** use the TwinCAT logger (`ADSLOGSTR`), not EventLogger event classes.
+- Single-deep, one RBG, one aisle; Beckhoff only.
 - The FEM 9.851 reference points are taken as P1 = (1/5 L, 2/3 H), P2 = (2/3 L, 1/5 H); check against the standard text before using the numbers for a real acceptance.

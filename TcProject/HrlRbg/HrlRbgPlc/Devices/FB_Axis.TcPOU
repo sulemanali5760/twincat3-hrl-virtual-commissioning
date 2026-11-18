@@ -9,7 +9,7 @@
 // velocity profile with limited speed and acceleration, integrated once per
 // call with lrCycleTime. lrActPos stands for the laser distance sensor value.
 // Simulated time (not wall clock) keeps the tests fast and repeatable.
-FUNCTION_BLOCK FB_Axis EXTENDS FB_CyclicNode
+FUNCTION_BLOCK FB_Axis EXTENDS FB_CyclicNode IMPLEMENTS I_Axis
 VAR_INPUT
     lrVelocity    : LREAL := 1.0;     // max. speed [m/s]
     lrAccel       : LREAL := 0.5;     // acceleration = deceleration [m/s2]
@@ -122,5 +122,37 @@ IF NOT bInPosition AND lrMoveTime > lrMoveTimeout THEN
 END_IF]]></ST>
       </Implementation>
     </Method>
+    <Method Name="Halt" Id="{6a26eb03-c6d3-5b45-f3f5-f4f3981a80f7}">
+      <Declaration><![CDATA[// Simulated stop: the axis stands where it is (no braking ramp in the simulation).
+METHOD PUBLIC Halt
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[lrActVelo   := 0.0;
+lrTarget    := lrActPos;
+lrMoveTime  := 0.0;
+bInPosition := TRUE;]]></ST>
+      </Implementation>
+    </Method>
+    <Property Name="ActPos" Id="{c720a400-a9a2-6fd9-3f2b-d877866a3149}">
+      <Declaration><![CDATA[PROPERTY PUBLIC ActPos : LREAL]]></Declaration>
+      <Get Name="Get" Id="{9fe31ab2-f899-bfd6-954d-73795755a9af}">
+        <Declaration><![CDATA[VAR
+END_VAR]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[ActPos := lrActPos;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Property Name="Error" Id="{15489421-12d4-7942-378a-9db279bc378b}">
+      <Declaration><![CDATA[PROPERTY PUBLIC Error : BOOL]]></Declaration>
+      <Get Name="Get" Id="{54e15aef-3b03-c8db-05fc-efa296218238}">
+        <Declaration><![CDATA[VAR
+END_VAR]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[Error := bError;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
   </POU>
 </TcPlcObject>

@@ -39,6 +39,15 @@
     <Compile Include="Devices\E_ZoneState.TcDUT">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Devices\E_AxisKind.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Devices\I_Axis.TcIO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Devices\FB_AxisNc.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="Devices\FB_Axis.TcPOU">
       <SubType>Code</SubType>
     </Compile>
@@ -108,6 +117,84 @@
     <Compile Include="Test\FB_TravelTime_Test.TcPOU">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Test\FB_AxisNc_Test.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Config\ST_RackConfig.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Config\ST_AxisConfig.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Config\ST_ZoneConfig.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Config\ST_HrlConfig.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Config\FB_HrlConfig.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Test\FB_HrlConfig_Test.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Mfr\E_MfrLink.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Mfr\ST_TelegramLayout.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Mfr\I_MfrLink.TcIO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Mfr\FB_TelegramCodec.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Mfr\FB_MfrLinkTcp.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Test\FB_MfrLinkFake.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Test\FB_TelegramCodec_Test.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Units\E_JogAxis.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Commissioning\FB_TeachIn.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Diag\E_Fault.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Diag\FB_Diag.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Test\FB_Operation_Test.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Safety\ST_SafetyStatus.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Safety\FB_SafetyInterface.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Test\FB_SafetyInterface_Test.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Hmi\ST_HmiStatus.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Hmi\ST_HmiCommand.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Hmi\GVL_Hmi.TcGVL">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Hmi\FB_HmiBridge.TcPOU">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="Test\PRG_TEST.TcPOU">
       <SubType>Code</SubType>
     </Compile>
@@ -120,11 +207,28 @@
     <Folder Include="Mfr" />
     <Folder Include="Machine" />
     <Folder Include="Test" />
+    <Folder Include="Config" />
+    <Folder Include="Commissioning" />
+    <Folder Include="Diag" />
+    <Folder Include="Safety" />
+    <Folder Include="Hmi" />
   </ItemGroup>
   <ItemGroup>
     <PlaceholderReference Include="NodeTree">
       <DefaultResolution>NodeTree, * (sulemanali5760)</DefaultResolution>
       <Namespace>NodeTree</Namespace>
+    </PlaceholderReference>
+    <PlaceholderReference Include="Tc2_MC2">
+      <DefaultResolution>Tc2_MC2, * (Beckhoff Automation GmbH)</DefaultResolution>
+      <Namespace>Tc2_MC2</Namespace>
+    </PlaceholderReference>
+    <PlaceholderReference Include="Tc3_JsonXml">
+      <DefaultResolution>Tc3_JsonXml, * (Beckhoff Automation GmbH)</DefaultResolution>
+      <Namespace>Tc3_JsonXml</Namespace>
+    </PlaceholderReference>
+    <PlaceholderReference Include="Tc2_TcpIp">
+      <DefaultResolution>Tc2_TcpIp, * (Beckhoff Automation GmbH)</DefaultResolution>
+      <Namespace>Tc2_TcpIp</Namespace>
     </PlaceholderReference>
     <PlaceholderReference Include="Tc2_Standard">
       <DefaultResolution>Tc2_Standard, * (Beckhoff Automation GmbH)</DefaultResolution>
@@ -142,6 +246,12 @@
     <PlaceholderReference Include="TcUnit">
       <DefaultResolution>TcUnit, * (www.tcunit.org)</DefaultResolution>
       <Namespace>TcUnit</Namespace>
+      <Parameters>
+        <Parameter ListName="GVL_Param_TcUnit">
+          <Key>XUNITENABLEPUBLISH</Key>
+          <Value>TRUE</Value>
+        </Parameter>
+      </Parameters>
     </PlaceholderReference>
   </ItemGroup>
   <ItemGroup>

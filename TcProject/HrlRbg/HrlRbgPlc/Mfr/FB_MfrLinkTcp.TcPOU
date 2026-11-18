@@ -1,0 +1,206 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_MfrLinkTcp" Id="{ac67f7d6-901f-a5d0-5f0f-c0e452557114}" SpecialFunc="None">
+    <Declaration><![CDATA[// FB_MfrLinkTcp - TCP/IP server for the material flow computer (TF6310,
+// Tc2_TcpIp). The PLC listens on nPort; one MFR connects. Every telegram is
+// framed as STX (16#02) + fixed-length text + ETX (16#03). Received frames are
+// decoded into a small inbox, telegrams to send wait in a small outbox.
+// A lost connection closes the socket and waits for the MFR to reconnect.
+// Call Cyclic() every PLC cycle.
+FUNCTION_BLOCK FB_MfrLinkTcp IMPLEMENTS I_MfrLink
+VAR_INPUT
+    nPort    : UINT := 2000;
+    stLayout : ST_TelegramLayout;
+END_VAR
+VAR_OUTPUT
+    bConnected : BOOL;
+    nErrId     : UDINT;   // last socket error (TF6310 error list)
+    nBadFrames : UDINT;
+END_VAR
+VAR
+    fbListen : FB_SocketListen;
+    fbAccept : FB_SocketAccept;
+    fbRecv   : FB_SocketReceive;
+    fbSend   : FB_SocketSend;
+    fbClose  : FB_SocketClose;
+    fbRetry  : TON;
+    fbCodec  : FB_TelegramCodec;
+    hListener : T_HSOCKET;
+    hSocket   : T_HSOCKET;
+    nState    : INT;
+    aRx       : ARRAY[0..1023] OF BYTE;
+    aFrame    : ARRAY[0..255] OF BYTE;   // frame being collected (0-terminated)
+    nFrameLen : INT;
+    bInFrame  : BOOL;
+    aTx       : ARRAY[0..257] OF BYTE;
+    bSending  : BOOL;
+    aInbox    : ARRAY[0..7] OF ST_Telegram;
+    nInHead, nInCount : INT;
+    aOutbox   : ARRAY[0..7] OF STRING(255);
+    nOutHead, nOutCount : INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name="Cyclic" Id="{a1c3040f-f967-1508-d7aa-bd695696e11e}">
+      <Declaration><![CDATA[METHOD PUBLIC Cyclic
+VAR_INPUT
+END_VAR
+VAR
+    i : UDINT;
+    pFrame : POINTER TO STRING(255);
+    stTel  : ST_Telegram;
+    sTx    : STRING(255);
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[fbCodec.stLayout := stLayout;
+CASE nState OF
+    0:  // open the listening socket
+        fbListen(sSrvNetId := '', sLocalHost := '', nLocalPort := nPort, bExecute := TRUE);
+        IF NOT fbListen.bBusy THEN
+            fbListen(bExecute := FALSE);
+            IF fbListen.bError THEN
+                nErrId := fbListen.nErrId;
+                nState := 90;
+            ELSE
+                hListener := fbListen.hListener;
+                nState := 1;
+            END_IF
+        END_IF
+    1:  // wait for the MFR to connect
+        fbAccept(sSrvNetId := '', hListener := hListener, bExecute := TRUE);
+        IF NOT fbAccept.bBusy THEN
+            fbAccept(bExecute := FALSE);
+            IF fbAccept.bError THEN
+                nErrId := fbAccept.nErrId;
+                nState := 91;
+            ELSIF fbAccept.bAccepted THEN
+                hSocket    := fbAccept.hSocket;
+                bConnected := TRUE;
+                bInFrame   := FALSE;
+                nState     := 2;
+            END_IF
+        END_IF
+    2:  // connected: receive and send
+        fbRecv(sSrvNetId := '', hSocket := hSocket, cbLen := SIZEOF(aRx), pDest := ADR(aRx), bExecute := TRUE);
+        IF NOT fbRecv.bBusy THEN
+            fbRecv(bExecute := FALSE);
+            IF fbRecv.bError THEN
+                nErrId := fbRecv.nErrId;
+                nState := 80;
+            ELSIF fbRecv.nRecBytes > 0 THEN
+                FOR i := 0 TO fbRecv.nRecBytes - 1 DO
+                    IF aRx[i] = 16#02 THEN            // STX: new frame
+                        bInFrame  := TRUE;
+                        nFrameLen := 0;
+                    ELSIF aRx[i] = 16#03 AND bInFrame THEN   // ETX: frame complete
+                        bInFrame := FALSE;
+                        aFrame[nFrameLen] := 0;
+                        pFrame := ADR(aFrame);
+                        IF NOT fbCodec.Decode(pFrame^, stTel) THEN
+                            stTel.sType := 'BAD';
+                            nBadFrames := nBadFrames + 1;
+                        END_IF
+                        PushIn(stTel);
+                    ELSIF bInFrame AND nFrameLen < 255 THEN
+                        aFrame[nFrameLen] := aRx[i];
+                        nFrameLen := nFrameLen + 1;
+                    END_IF
+                END_FOR
+            END_IF
+        END_IF
+        IF bSending THEN
+            fbSend(bExecute := TRUE);
+            IF NOT fbSend.bBusy THEN
+                fbSend(bExecute := FALSE);
+                bSending := FALSE;
+                IF fbSend.bError THEN
+                    nErrId := fbSend.nErrId;
+                    nState := 80;
+                END_IF
+            END_IF
+        ELSIF nOutCount > 0 THEN
+            sTx := aOutbox[nOutHead];
+            nOutHead  := (nOutHead + 1) MOD 8;
+            nOutCount := nOutCount - 1;
+            aTx[0] := 16#02;
+            MEMCPY(destAddr := ADR(aTx[1]), srcAddr := ADR(sTx), n := INT_TO_UDINT(LEN(sTx)));
+            aTx[LEN(sTx) + 1] := 16#03;
+            fbSend(sSrvNetId := '', hSocket := hSocket, cbLen := INT_TO_UDINT(LEN(sTx) + 2),
+                   pSrc := ADR(aTx), bExecute := TRUE);
+            bSending := TRUE;
+        END_IF
+    80: // connection lost: close it and wait for the next one
+        fbClose(sSrvNetId := '', hSocket := hSocket, bExecute := TRUE);
+        IF NOT fbClose.bBusy THEN
+            fbClose(bExecute := FALSE);
+            bConnected := FALSE;
+            bSending   := FALSE;
+            nOutCount  := 0;
+            nState     := 1;
+        END_IF
+    90, 91: // socket error: retry after 2 s (90 = listen again, 91 = accept again)
+        fbRetry(IN := TRUE, PT := T#2S);
+        IF fbRetry.Q THEN
+            fbRetry(IN := FALSE);
+            IF nState = 90 THEN
+                nState := 0;
+            ELSE
+                nState := 1;
+            END_IF
+        END_IF
+END_CASE]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="PushIn" Id="{4efc0398-94a7-cd3a-e90b-48d7b3296f63}">
+      <Declaration><![CDATA[METHOD PRIVATE PushIn
+VAR_INPUT
+    stTel : ST_Telegram;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF nInCount < 8 THEN   // a full inbox drops the frame; the MFR repeats on timeout
+    aInbox[(nInHead + nInCount) MOD 8] := stTel;
+    nInCount := nInCount + 1;
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Poll" Id="{0ab2f719-8685-0bb4-1e46-e07f75c06b43}">
+      <Declaration><![CDATA[METHOD PUBLIC Poll : BOOL
+VAR_IN_OUT
+    stIn : ST_Telegram;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF nInCount > 0 THEN
+    stIn     := aInbox[nInHead];
+    nInHead  := (nInHead + 1) MOD 8;
+    nInCount := nInCount - 1;
+    Poll     := TRUE;
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Send" Id="{c4c0d386-3c60-658a-1388-dd314b5e4a28}">
+      <Declaration><![CDATA[METHOD PUBLIC Send : BOOL
+VAR_INPUT
+    stOut : ST_Telegram;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[fbCodec.stLayout := stLayout;
+IF bConnected AND nOutCount < 8 THEN
+    aOutbox[(nOutHead + nOutCount) MOD 8] := fbCodec.Encode(stOut);
+    nOutCount := nOutCount + 1;
+    Send := TRUE;
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Property Name="Connected" Id="{9ccc1506-fe9e-8323-aa7e-90b963b18f00}">
+      <Declaration><![CDATA[PROPERTY PUBLIC Connected : BOOL]]></Declaration>
+      <Get Name="Get" Id="{607a94ef-f3f5-9340-b33a-cfe9652b4201}">
+        <Declaration><![CDATA[VAR
+END_VAR]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[Connected := bConnected;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+  </POU>
+</TcPlcObject>

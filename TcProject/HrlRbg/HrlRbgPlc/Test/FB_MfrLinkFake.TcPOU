@@ -1,0 +1,63 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_MfrLinkFake" Id="{7809e205-2f05-5645-f29b-1f1ac7eb99e8}" SpecialFunc="None">
+    <Declaration><![CDATA[// Test double for I_MfrLink: hands out one prepared telegram and records
+// everything the PLC sends.
+FUNCTION_BLOCK FB_MfrLinkFake IMPLEMENTS I_MfrLink
+VAR
+    stNext   : ST_Telegram;
+    bHasNext : BOOL;
+    aSent    : ARRAY[1..8] OF ST_Telegram;
+    nSent    : INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name="Give" Id="{6df5eb4b-9795-a902-29c5-21dee0b819de}">
+      <Declaration><![CDATA[METHOD PUBLIC Give
+VAR_INPUT
+    stTel : ST_Telegram;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[stNext   := stTel;
+bHasNext := TRUE;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Poll" Id="{8ebc23d9-4539-5787-2ca9-793f54a82404}">
+      <Declaration><![CDATA[METHOD PUBLIC Poll : BOOL
+VAR_IN_OUT
+    stIn : ST_Telegram;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF bHasNext THEN
+    stIn     := stNext;
+    bHasNext := FALSE;
+    Poll     := TRUE;
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Send" Id="{d6a2e940-5aea-46e0-31df-2d96a9734c9c}">
+      <Declaration><![CDATA[METHOD PUBLIC Send : BOOL
+VAR_INPUT
+    stOut : ST_Telegram;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF nSent < 8 THEN
+    nSent := nSent + 1;
+    aSent[nSent] := stOut;
+    Send := TRUE;
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Property Name="Connected" Id="{634a92ad-64e4-8939-fef1-40a1061cd009}">
+      <Declaration><![CDATA[PROPERTY PUBLIC Connected : BOOL]]></Declaration>
+      <Get Name="Get" Id="{7579a1c9-828a-0fc3-a43e-16c20e3312c6}">
+        <Declaration><![CDATA[VAR
+END_VAR]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[Connected := TRUE;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+  </POU>
+</TcPlcObject>

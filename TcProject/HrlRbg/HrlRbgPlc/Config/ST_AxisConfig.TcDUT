@@ -1,0 +1,11 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_AxisConfig" Id="{596e8880-a9ef-5f10-b0ac-54fb12356a47}">
+    <Declaration><![CDATA[TYPE ST_AxisConfig :
+STRUCT
+    lrVelocity : LREAL := 1.0;   // [m/s]
+    lrAccel    : LREAL := 0.5;   // acceleration = deceleration [m/s2]
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

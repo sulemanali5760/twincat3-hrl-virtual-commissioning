@@ -3,7 +3,12 @@
   <GVL Name="GVL_Rack" Id="{cc8b8d5c-a424-4614-9688-35ca7f1a646f}">
     <Declaration><![CDATA[{attribute 'qualified_only'}
 VAR_GLOBAL CONSTANT
-    // Rack geometry of the practice plant: one aisle, single-deep, both sides.
+    // Largest rack the PLC reserves memory for. The real size comes from the
+    // configuration (ST_RackConfig) and may be anything up to these.
+    cMaxSides   : INT   := 2;
+    cMaxColumns : INT   := 60;
+    cMaxLevels  : INT   := 16;
+    // Defaults = the practice plant: one aisle, single-deep, both sides.
     cSides      : INT   := 2;
     cColumns    : INT   := 20;
     cLevels     : INT   := 8;

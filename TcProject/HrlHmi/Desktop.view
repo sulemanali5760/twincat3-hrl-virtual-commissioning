@@ -1,0 +1,180 @@
+<div
+  id="Desktop"
+  data-tchmi-type="TcHmi.Controls.System.TcHmiView"
+  data-tchmi-top="0"
+  data-tchmi-left="0"
+  data-tchmi-width-mode="Content"
+  data-tchmi-min-width="100"
+  data-tchmi-min-width-unit="%"
+  data-tchmi-height-mode="Content"
+  data-tchmi-min-height="100"
+  data-tchmi-min-height-unit="%"
+>
+  <!-- HRL / RBG operator page. All data comes from GVL_Hmi (PLC), mapped with
+       attribute TcHmiSymbol.AddSymbol. Symbol prefix used below:
+       ADS.PLC1.GVL_Hmi.stStatus / ADS.PLC1.GVL_Hmi.stCommand -->
+
+  <div id="Title" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiTextblock"
+    data-tchmi-left="20" data-tchmi-top="15" data-tchmi-width="700" data-tchmi-height="40"
+    data-tchmi-text="High-bay warehouse - RBG01" data-tchmi-text-font-size="24" data-tchmi-text-font-weight="Bold"></div>
+
+  <!-- ================= Status ================= -->
+  <div id="LblStatus" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiTextblock"
+    data-tchmi-left="20" data-tchmi-top="70" data-tchmi-width="300" data-tchmi-height="28"
+    data-tchmi-text="Status" data-tchmi-text-font-weight="Bold"></div>
+
+  <div id="LblMode" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiTextblock"
+    data-tchmi-left="20" data-tchmi-top="105" data-tchmi-width="200" data-tchmi-height="26"
+    data-tchmi-text="Mode (0 stop, 1 man, 2 home, 3 auto)"></div>
+  <div id="ValMode" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiNumericInput"
+    data-tchmi-left="230" data-tchmi-top="105" data-tchmi-width="90" data-tchmi-height="26"
+    data-tchmi-is-read-only="true" data-tchmi-decimal-digits="0"
+    data-tchmi-value="%s%ADS.PLC1.GVL_Hmi.stStatus::nMode%/s%"></div>
+
+  <div id="LblSafety" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiTextblock"
+    data-tchmi-left="20" data-tchmi-top="135" data-tchmi-width="200" data-tchmi-height="26"
+    data-tchmi-text="Safety OK"></div>
+  <div id="ValSafety" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiTextblock"
+    data-tchmi-left="230" data-tchmi-top="135" data-tchmi-width="90" data-tchmi-height="26"
+    data-tchmi-text="%s%ADS.PLC1.GVL_Hmi.stStatus::bSafetyOk%/s%"></div>
+
+  <div id="LblTravel" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiTextblock"
+    data-tchmi-left="20" data-tchmi-top="165" data-tchmi-width="200" data-tchmi-height="26"
+    data-tchmi-text="Travel [m]"></div>
+  <div id="ValTravel" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiNumericInput"
+    data-tchmi-left="230" data-tchmi-top="165" data-tchmi-width="90" data-tchmi-height="26"
+    data-tchmi-is-read-only="true" data-tchmi-decimal-digits="3"
+    data-tchmi-value="%s%ADS.PLC1.GVL_Hmi.stStatus::lrTravelPos%/s%"></div>
+
+  <div id="LblHoist" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiTextblock"
+    data-tchmi-left="20" data-tchmi-top="195" data-tchmi-width="200" data-tchmi-height="26"
+    data-tchmi-text="Hoist [m]"></div>
+  <div id="ValHoist" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiNumericInput"
+    data-tchmi-left="230" data-tchmi-top="195" data-tchmi-width="90" data-tchmi-height="26"
+    data-tchmi-is-read-only="true" data-tchmi-decimal-digits="3"
+    data-tchmi-value="%s%ADS.PLC1.GVL_Hmi.stStatus::lrHoistPos%/s%"></div>
+
+  <div id="LblFork" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiTextblock"
+    data-tchmi-left="20" data-tchmi-top="225" data-tchmi-width="200" data-tchmi-height="26"
+    data-tchmi-text="Fork [m]"></div>
+  <div id="ValFork" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiNumericInput"
+    data-tchmi-left="230" data-tchmi-top="225" data-tchmi-width="90" data-tchmi-height="26"
+    data-tchmi-is-read-only="true" data-tchmi-decimal-digits="3"
+    data-tchmi-value="%s%ADS.PLC1.GVL_Hmi.stStatus::lrForkPos%/s%"></div>
+
+  <div id="LblLe" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiTextblock"
+    data-tchmi-left="20" data-tchmi-top="255" data-tchmi-width="200" data-tchmi-height="26"
+    data-tchmi-text="Load unit on fork"></div>
+  <div id="ValLe" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiTextblock"
+    data-tchmi-left="230" data-tchmi-top="255" data-tchmi-width="120" data-tchmi-height="26"
+    data-tchmi-text="%s%ADS.PLC1.GVL_Hmi.stStatus::sLeOnFork%/s%"></div>
+
+  <div id="LblJobs" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiTextblock"
+    data-tchmi-left="20" data-tchmi-top="285" data-tchmi-width="200" data-tchmi-height="26"
+    data-tchmi-text="Jobs done / stored / retrieved"></div>
+  <div id="ValJobs" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiNumericInput"
+    data-tchmi-left="230" data-tchmi-top="285" data-tchmi-width="60" data-tchmi-height="26"
+    data-tchmi-is-read-only="true" data-tchmi-decimal-digits="0"
+    data-tchmi-value="%s%ADS.PLC1.GVL_Hmi.stStatus::nJobsDone%/s%"></div>
+  <div id="ValStored" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiNumericInput"
+    data-tchmi-left="295" data-tchmi-top="285" data-tchmi-width="60" data-tchmi-height="26"
+    data-tchmi-is-read-only="true" data-tchmi-decimal-digits="0"
+    data-tchmi-value="%s%ADS.PLC1.GVL_Hmi.stStatus::nStored%/s%"></div>
+  <div id="ValRetrieved" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiNumericInput"
+    data-tchmi-left="360" data-tchmi-top="285" data-tchmi-width="60" data-tchmi-height="26"
+    data-tchmi-is-read-only="true" data-tchmi-decimal-digits="0"
+    data-tchmi-value="%s%ADS.PLC1.GVL_Hmi.stStatus::nRetrieved%/s%"></div>
+
+  <!-- ================= Operating mode ================= -->
+  <div id="LblModeSel" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiTextblock"
+    data-tchmi-left="460" data-tchmi-top="70" data-tchmi-width="300" data-tchmi-height="28"
+    data-tchmi-text="Operating mode" data-tchmi-text-font-weight="Bold"></div>
+  <div id="BtnStop" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiButton"
+    data-tchmi-left="460" data-tchmi-top="105" data-tchmi-width="100" data-tchmi-height="40"
+    data-tchmi-text="Stop" data-tchmi-state-symbol="%s%ADS.PLC1.GVL_Hmi.stCommand::bModeStop%/s%"></div>
+  <div id="BtnManual" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiButton"
+    data-tchmi-left="570" data-tchmi-top="105" data-tchmi-width="100" data-tchmi-height="40"
+    data-tchmi-text="Manual" data-tchmi-state-symbol="%s%ADS.PLC1.GVL_Hmi.stCommand::bModeManual%/s%"></div>
+  <div id="BtnHoming" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiButton"
+    data-tchmi-left="680" data-tchmi-top="105" data-tchmi-width="100" data-tchmi-height="40"
+    data-tchmi-text="Homing" data-tchmi-state-symbol="%s%ADS.PLC1.GVL_Hmi.stCommand::bModeHoming%/s%"></div>
+  <div id="BtnAuto" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiButton"
+    data-tchmi-left="790" data-tchmi-top="105" data-tchmi-width="100" data-tchmi-height="40"
+    data-tchmi-text="Automatic" data-tchmi-state-symbol="%s%ADS.PLC1.GVL_Hmi.stCommand::bModeAuto%/s%"></div>
+  <div id="BtnSafetyReset" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiButton"
+    data-tchmi-left="460" data-tchmi-top="155" data-tchmi-width="210" data-tchmi-height="40"
+    data-tchmi-text="Acknowledge safety" data-tchmi-state-symbol="%s%ADS.PLC1.GVL_Hmi.stCommand::bSafetyReset%/s%"></div>
+  <div id="BtnResetFault" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiButton"
+    data-tchmi-left="680" data-tchmi-top="155" data-tchmi-width="210" data-tchmi-height="40"
+    data-tchmi-text="Reset RBG fault" data-tchmi-state-symbol="%s%ADS.PLC1.GVL_Hmi.stCommand::bResetFault%/s%"></div>
+
+  <!-- ================= Manual / teach-in ================= -->
+  <div id="LblManual" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiTextblock"
+    data-tchmi-left="460" data-tchmi-top="215" data-tchmi-width="430" data-tchmi-height="28"
+    data-tchmi-text="Manual (mode Manual): jog axis 0 travel, 1 hoist, 2 fork" data-tchmi-text-font-weight="Bold"></div>
+  <div id="InJogAxis" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiNumericInput"
+    data-tchmi-left="460" data-tchmi-top="250" data-tchmi-width="60" data-tchmi-height="40"
+    data-tchmi-min-value="0" data-tchmi-max-value="2" data-tchmi-decimal-digits="0"
+    data-tchmi-value="%s%ADS.PLC1.GVL_Hmi.stCommand::nJogAxis%/s%"></div>
+  <div id="BtnJogBwd" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiButton"
+    data-tchmi-left="530" data-tchmi-top="250" data-tchmi-width="100" data-tchmi-height="40"
+    data-tchmi-text="Jog -" data-tchmi-state-symbol="%s%ADS.PLC1.GVL_Hmi.stCommand::bJogBwd%/s%"></div>
+  <div id="BtnJogFwd" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiButton"
+    data-tchmi-left="640" data-tchmi-top="250" data-tchmi-width="100" data-tchmi-height="40"
+    data-tchmi-text="Jog +" data-tchmi-state-symbol="%s%ADS.PLC1.GVL_Hmi.stCommand::bJogFwd%/s%"></div>
+  <div id="ValJogBlocked" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiTextblock"
+    data-tchmi-left="750" data-tchmi-top="250" data-tchmi-width="140" data-tchmi-height="40"
+    data-tchmi-text="%s%ADS.PLC1.GVL_Hmi.stStatus::bJogBlocked%/s%"></div>
+
+  <div id="LblTeach" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiTextblock"
+    data-tchmi-left="460" data-tchmi-top="300" data-tchmi-width="430" data-tchmi-height="26"
+    data-tchmi-text="Teach-in: side / column / level"></div>
+  <div id="InTeachSide" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiNumericInput"
+    data-tchmi-left="460" data-tchmi-top="330" data-tchmi-width="60" data-tchmi-height="40"
+    data-tchmi-min-value="1" data-tchmi-max-value="2" data-tchmi-decimal-digits="0"
+    data-tchmi-value="%s%ADS.PLC1.GVL_Hmi.stCommand::nTeachSide%/s%"></div>
+  <div id="InTeachColumn" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiNumericInput"
+    data-tchmi-left="530" data-tchmi-top="330" data-tchmi-width="60" data-tchmi-height="40"
+    data-tchmi-min-value="1" data-tchmi-max-value="60" data-tchmi-decimal-digits="0"
+    data-tchmi-value="%s%ADS.PLC1.GVL_Hmi.stCommand::nTeachColumn%/s%"></div>
+  <div id="InTeachLevel" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiNumericInput"
+    data-tchmi-left="600" data-tchmi-top="330" data-tchmi-width="60" data-tchmi-height="40"
+    data-tchmi-min-value="1" data-tchmi-max-value="16" data-tchmi-decimal-digits="0"
+    data-tchmi-value="%s%ADS.PLC1.GVL_Hmi.stCommand::nTeachLevel%/s%"></div>
+  <div id="BtnTeachStart" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiButton"
+    data-tchmi-left="670" data-tchmi-top="330" data-tchmi-width="105" data-tchmi-height="40"
+    data-tchmi-text="Go to place" data-tchmi-state-symbol="%s%ADS.PLC1.GVL_Hmi.stCommand::bTeachStart%/s%"></div>
+  <div id="BtnTeachConfirm" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiButton"
+    data-tchmi-left="785" data-tchmi-top="330" data-tchmi-width="105" data-tchmi-height="40"
+    data-tchmi-text="Confirm" data-tchmi-state-symbol="%s%ADS.PLC1.GVL_Hmi.stCommand::bTeachConfirm%/s%"></div>
+  <div id="LblTaught" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiTextblock"
+    data-tchmi-left="460" data-tchmi-top="380" data-tchmi-width="200" data-tchmi-height="26"
+    data-tchmi-text="Places taught / last refused"></div>
+  <div id="ValTaught" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiNumericInput"
+    data-tchmi-left="670" data-tchmi-top="380" data-tchmi-width="60" data-tchmi-height="26"
+    data-tchmi-is-read-only="true" data-tchmi-decimal-digits="0"
+    data-tchmi-value="%s%ADS.PLC1.GVL_Hmi.stStatus::nTaught%/s%"></div>
+  <div id="ValTeachRejected" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiTextblock"
+    data-tchmi-left="740" data-tchmi-top="380" data-tchmi-width="150" data-tchmi-height="26"
+    data-tchmi-text="%s%ADS.PLC1.GVL_Hmi.stStatus::bTeachRejected%/s%"></div>
+
+  <!-- ================= Faults ================= -->
+  <div id="LblFaults" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiTextblock"
+    data-tchmi-left="20" data-tchmi-top="430" data-tchmi-width="300" data-tchmi-height="28"
+    data-tchmi-text="Active faults (cause - remedy)" data-tchmi-text-font-weight="Bold"></div>
+  <div id="ValFault1" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiTextblock"
+    data-tchmi-left="20" data-tchmi-top="465" data-tchmi-width="870" data-tchmi-height="26"
+    data-tchmi-text="%s%ADS.PLC1.GVL_Hmi.stStatus::sFault1%/s%"></div>
+  <div id="ValFault2" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiTextblock"
+    data-tchmi-left="20" data-tchmi-top="495" data-tchmi-width="870" data-tchmi-height="26"
+    data-tchmi-text="%s%ADS.PLC1.GVL_Hmi.stStatus::sFault2%/s%"></div>
+  <div id="ValFault3" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiTextblock"
+    data-tchmi-left="20" data-tchmi-top="525" data-tchmi-width="870" data-tchmi-height="26"
+    data-tchmi-text="%s%ADS.PLC1.GVL_Hmi.stStatus::sFault3%/s%"></div>
+  <div id="ValFault4" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiTextblock"
+    data-tchmi-left="20" data-tchmi-top="555" data-tchmi-width="870" data-tchmi-height="26"
+    data-tchmi-text="%s%ADS.PLC1.GVL_Hmi.stStatus::sFault4%/s%"></div>
+  <div id="ValConfigError" data-tchmi-type="TcHmi.Controls.Beckhoff.TcHmiTextblock"
+    data-tchmi-left="20" data-tchmi-top="590" data-tchmi-width="870" data-tchmi-height="26"
+    data-tchmi-text="%s%ADS.PLC1.GVL_Hmi.stStatus::sConfigError%/s%"></div>
+</div>

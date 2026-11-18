@@ -8,6 +8,13 @@
 // station -> RBG stores it. Retrieved pallets are put on the station and leave
 // over the out-feed.
 FUNCTION_BLOCK FB_Hrl EXTENDS FB_ModeNode
+VAR_INPUT
+    stConfig : ST_HrlConfig;   // applied once on the first cycle (set it before)
+    sConfigError : STRING(120);   // from FB_HrlConfig; shown as a fault
+    stSafety     : ST_SafetyStatus;   // map from the safety controller (TwinSAFE group outputs)
+    bSafetyReset : BOOL;              // acknowledge button
+    bDoorRequest : BOOL;              // operator wants to enter the aisle
+END_VAR
 VAR
     fbRack    : FB_Rack;
     fbSrm     : FB_Srm(ipParent := THIS^, sNodeName := 'RBG01');
@@ -15,6 +22,10 @@ VAR
     fbOutfeed : FB_ConveyorZone(ipParent := THIS^, sNodeName := 'Outfeed');
     fbIPoint  : FB_IPoint;
     fbMfr     : FB_MfrInterface;
+    fbMfrTcp  : FB_MfrLinkTcp;     // used when stConfig.eMfrLink = eTcp
+    fbTeach   : FB_TeachIn;        // guided teach-in (manual mode)
+    fbDiag    : FB_Diag;           // active faults for the HMI + TwinCAT logger
+    fbSafety  : FB_SafetyInterface;
     bInitDone : BOOL;
     nInStep   : INT;
     sMovingLe : STRING(20);
@@ -22,6 +33,8 @@ END_VAR
 VAR_OUTPUT
     bStationOutbound : BOOL;   // pallet on the station is leaving (retrieved), not arriving
     bStationReserved : BOOL;   // station held free for a retrieval: the in-feed must wait
+    bSafetyOk        : BOOL;   // drives may run; FALSE -> MAIN forces stop mode
+    bDoorUnlockReq   : BOOL;   // to the safety controller
 END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[]]></ST>
@@ -32,12 +45,40 @@ VAR_INPUT
 END_VAR]]></Declaration>
       <Implementation>
         <ST><![CDATA[IF NOT bInitDone THEN
+    // The plant is built from the configuration; the code below never changes per site.
+    fbRack.stCfg      := stConfig.stRack;
+    fbSrm.eAxisKind   := stConfig.eAxisKind;
+    fbSrm.stTravelCfg := stConfig.stTravel;
+    fbSrm.stHoistCfg  := stConfig.stHoist;
+    fbSrm.stForkCfg   := stConfig.stFork;
+    ApplyZone(fbInfeed, stConfig.stInfeed);    // same standard block, other parameters
+    ApplyZone(fbOutfeed, stConfig.stOutfeed);
+    fbMfr.lrAckTimeout := stConfig.lrAckTimeout;
     fbSrm.Init(fbRack);
     fbMfr.Init(fbRack, fbSrm);
-    fbOutfeed.lrLength := 2.4;   // same standard block, other parameters
+    fbTeach.Init(fbRack, fbSrm);
+    fbMfrTcp.nPort    := stConfig.nMfrPort;
+    fbMfrTcp.stLayout := stConfig.stLayout;
     bInitDone := TRUE;
 END_IF
-SUPER^.OnCyclic();]]></ST>
+IF stConfig.eMfrLink = E_MfrLink.eTcp THEN
+    fbMfrTcp.Cyclic();          // the link stays up in every operating mode
+    fbMfr.Serve(fbMfrTcp);
+END_IF
+fbSafety(stStatus := stSafety, bSimulate := stConfig.bSafetySimulate, bReset := bSafetyReset,
+         bDoorRequest := bDoorRequest, bStandstill := NOT fbSrm.bBusy AND NOT fbSrm.bGotoActive);
+bSafetyOk      := fbSafety.bDriveEnable;
+bDoorUnlockReq := fbSafety.bDoorUnlockReq;
+SUPER^.OnCyclic();
+fbDiag.Check(E_Fault.eSafety, NOT bSafetyOk, 'Safety stop - check e-stop and aisle door, then acknowledge');
+fbDiag.Check(E_Fault.eSrmAxis, fbSrm.bFault, 'RBG axis fault - check the drive, then ResetFault');
+fbDiag.Check(E_Fault.eInfeedJam, fbInfeed.eState = E_ZoneState.eFault, 'In-feed jam - clear the pallet, reset the zone');
+fbDiag.Check(E_Fault.eOutfeedJam, fbOutfeed.eState = E_ZoneState.eFault, 'Out-feed jam - clear the pallet, reset the zone');
+fbDiag.Check(E_Fault.eMfrAck, fbMfr.bAckTimeout, 'MFR did not acknowledge TDON - check the MFR');
+fbDiag.Check(E_Fault.eMfrLinkDown, stConfig.eMfrLink = E_MfrLink.eTcp AND NOT fbMfrTcp.bConnected,
+             'No MFR connected - check network / MFR port');
+fbDiag.Check(E_Fault.eConfig, sConfigError <> '', 'HrlConfig.json rejected - defaults in use, see sConfigError');
+fbDiag.Check(E_Fault.eTeachRejected, fbTeach.bLastRejected, 'Teach-in refused - place too far from drawing, check rack');]]></ST>
       </Implementation>
     </Method>
     <Method Name="RunAutomatic" Id="{10d74ef1-ca39-4c08-9fa9-d5ebb774ba3d}">
@@ -95,6 +136,35 @@ VAR_INPUT
 END_VAR]]></Declaration>
       <Implementation>
         <ST><![CDATA[bStationReserved := TRUE;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Jog" Id="{f83f1014-3638-d543-7b69-b77a7040e8d1}">
+      <Declaration><![CDATA[// Manual jog request from the HMI (acts in manual mode only).
+METHOD PUBLIC Jog
+VAR_INPUT
+    eAxis : E_JogAxis;
+    bFwd  : BOOL;
+    bBwd  : BOOL;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[fbSrm.eJogAxis := eAxis;
+fbSrm.bJogFwd  := bFwd;
+fbSrm.bJogBwd  := bBwd;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ApplyZone" Id="{d2acfcce-701a-a281-639c-c14150369c7e}">
+      <Declaration><![CDATA[METHOD PRIVATE ApplyZone
+VAR_IN_OUT
+    fbZone : FB_ConveyorZone;
+END_VAR
+VAR_INPUT
+    stCfg : ST_ZoneConfig;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[fbZone.lrLength     := stCfg.lrLength;
+fbZone.lrSpeed      := stCfg.lrSpeed;
+fbZone.lrJamTimeout := stCfg.lrJamTimeout;
+fbZone.bSimulate    := stCfg.bSimulate;]]></ST>
       </Implementation>
     </Method>
   </POU>

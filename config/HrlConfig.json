@@ -1,0 +1,33 @@
+{
+  "rack": {
+    "sides": 2,
+    "columns": 20,
+    "levels": 8,
+    "pitchX": 1.40,
+    "pitchY": 1.30,
+    "offsetX": 2.00,
+    "offsetY": 0.50,
+    "forkStroke": 1.10,
+    "liftStroke": 0.10,
+    "teachTolerance": 0.020
+  },
+  "axes": {
+    "kind": "sim",
+    "travel": { "velocity": 3.0, "accel": 0.6 },
+    "hoist":  { "velocity": 1.5, "accel": 0.8 },
+    "fork":   { "velocity": 0.6, "accel": 0.6 }
+  },
+  "conveyors": {
+    "infeed":  { "length": 1.6, "speed": 0.2, "jamTimeout": 20, "simulate": true },
+    "outfeed": { "length": 2.4, "speed": 0.2, "jamTimeout": 20, "simulate": true }
+  },
+  "mfr": {
+    "link": "emulator",
+    "port": 2000,
+    "ackTimeout": 5.0,
+    "layout": { "type": 4, "seq": 5, "order": 8, "leId": 20, "side": 1, "column": 3, "level": 2, "status": 3 }
+  },
+  "safety": {
+    "simulate": true
+  }
+}

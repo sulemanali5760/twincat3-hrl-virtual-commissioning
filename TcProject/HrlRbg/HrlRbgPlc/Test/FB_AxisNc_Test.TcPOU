@@ -1,0 +1,74 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_AxisNc_Test" Id="{44214b4a-b49e-ed99-f714-f2fb6e363b29}" SpecialFunc="None">
+    <Declaration><![CDATA[// Tests for the NC axis path: FB_AxisNc on its own, and a whole RBG job with
+// eAxisKind = eNc. They run against NC simulation axes (TestAxis, TestTravel,
+// TestHoist, TestFork in the NC task), so unlike the other suites they take
+// real time: one Cyclic() per PLC cycle until done or the cycle budget is spent.
+FUNCTION_BLOCK FB_AxisNc_Test EXTENDS TcUnit.FB_TestSuite
+VAR
+    fbAxis   : FB_AxisNc(ipParent := 0, sNodeName := 'TestAxis');
+    fbRackNc : FB_Rack;
+    fbSrmNc  : FB_Srm(ipParent := 0, sNodeName := 'SrmNc');
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[MoveAbs_ReachesTheTargetOnTheNcAxis();
+StoreJob_RunsOnNcAxes();]]></ST>
+    </Implementation>
+    <Method Name="MoveAbs_ReachesTheTargetOnTheNcAxis" Id="{7ac8ca10-0682-cdd2-0b40-115f4ec2d55c}">
+      <Declaration><![CDATA[METHOD PRIVATE MoveAbs_ReachesTheTargetOnTheNcAxis
+VAR_INST
+    nCycles : DINT;
+    eResult : E_CmdResult;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('MoveAbs_ReachesTheTargetOnTheNcAxis');
+fbAxis.bEnable    := TRUE;
+fbAxis.lrVelocity := 1.0;
+fbAxis.lrAccel    := 2.0;
+eResult := fbAxis.MoveAbs(0.5);
+fbAxis.Cyclic();
+nCycles := nCycles + 1;
+IF eResult = E_CmdResult.eBusy AND nCycles < 1000 THEN   // 10 s budget at 10 ms
+    RETURN;
+END_IF
+AssertEquals_INT(Expected := TO_INT(E_CmdResult.eDone), Actual := TO_INT(eResult), Message := 'move must finish without error');
+AssertEquals_LREAL(Expected := 0.5, Actual := fbAxis.ActPos, Delta := 0.002, Message := 'NC axis must stand at the target');
+AssertFalse(Condition := fbAxis.Error, Message := 'no NC error');
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="StoreJob_RunsOnNcAxes" Id="{9b234b74-7c6d-aa3f-752d-e22f15b41dea}">
+      <Declaration><![CDATA[METHOD PRIVATE StoreJob_RunsOnNcAxes
+VAR_INST
+    bStarted : BOOL;
+    nCycles  : DINT;
+END_VAR
+VAR
+    stStation : ST_SlotAddr := (nSide := 1, nColumn := 0, nLevel := 1);
+    stPlace   : ST_SlotAddr := (nSide := 1, nColumn := 1, nLevel := 1);
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('StoreJob_RunsOnNcAxes');
+IF NOT bStarted THEN
+    bStarted := TRUE;
+    fbSrmNc.eAxisKind := E_AxisKind.eNc;
+    fbSrmNc.Init(fbRackNc);
+    fbSrmNc.SetMode(E_OpMode.eAutomatic);
+    fbRackNc.Put(stStation, 'LE0042');
+    AssertTrue(Condition := fbSrmNc.StartJob(stStation, stPlace), Message := 'job must be accepted');
+END_IF
+fbSrmNc.Cyclic();
+nCycles := nCycles + 1;
+IF NOT fbSrmNc.bJobDone AND NOT fbSrmNc.bFault AND nCycles < 6000 THEN   // 60 s budget
+    RETURN;
+END_IF
+AssertTrue(Condition := fbSrmNc.bJobDone, Message := 'store job on NC axes must finish');
+AssertFalse(Condition := fbSrmNc.bFault, Message := 'no axis fault');
+AssertEquals_STRING(Expected := 'LE0042', Actual := fbRackNc.LeIdAt(stPlace), Message := 'pallet must be booked into the place');
+AssertEquals_LREAL(Expected := fbRackNc.TargetX(stPlace), Actual := fbSrmNc.TravelPos, Delta := 0.002, Message := 'RBG must stand at the place');
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

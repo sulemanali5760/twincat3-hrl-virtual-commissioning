@@ -1,0 +1,30 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <Itf Name="I_MfrLink" Id="{e3025519-2cd3-012e-eb39-54dc077eccec}">
+    <Declaration><![CDATA[// I_MfrLink - transport of telegrams between the PLC and the material flow
+// computer. FB_MfrInterface only sees telegrams; how they travel (TCP, a test
+// double) is behind this interface.
+INTERFACE I_MfrLink]]></Declaration>
+    <Method Name="Poll" Id="{8cb7c1e3-f127-0f00-3aa1-03b2145df239}">
+      <Declaration><![CDATA[// Next received telegram, TRUE if there was one. A frame that could not be
+// decoded comes back with sType = 'BAD'.
+METHOD Poll : BOOL
+VAR_IN_OUT
+    stIn : ST_Telegram;
+END_VAR]]></Declaration>
+    </Method>
+    <Method Name="Send" Id="{53a38bb3-814c-81f4-3c6c-f869a2ecc141}">
+      <Declaration><![CDATA[// Queue a telegram for the MFR. FALSE if not connected or the queue is full.
+METHOD Send : BOOL
+VAR_INPUT
+    stOut : ST_Telegram;
+END_VAR]]></Declaration>
+    </Method>
+    <Property Name="Connected" Id="{c72ec0a4-8cbc-7b80-2c09-5d313445cf00}">
+      <Declaration><![CDATA[PROPERTY Connected : BOOL]]></Declaration>
+      <Get Name="Get" Id="{8922ef15-10f6-5af3-b249-37420041ac52}">
+        <Declaration><![CDATA[]]></Declaration>
+      </Get>
+    </Property>
+  </Itf>
+</TcPlcObject>

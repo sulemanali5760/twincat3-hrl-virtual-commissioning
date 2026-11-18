@@ -1,0 +1,154 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_TelegramCodec_Test" Id="{7c4b5503-0f36-8802-dd88-a384bca52ab1}" SpecialFunc="None">
+    <Declaration><![CDATA[// Tests for the MFR wire format and for FB_MfrInterface.Serve over a link.
+FUNCTION_BLOCK FB_TelegramCodec_Test EXTENDS TcUnit.FB_TestSuite
+VAR
+    fbCodec  : FB_TelegramCodec;
+    fbCodec2 : FB_TelegramCodec;
+    fbRack   : FB_Rack;
+    fbSrm    : FB_Srm(ipParent := 0, sNodeName := 'SrmServe');
+    fbMfr    : FB_MfrInterface;
+    fbLink   : FB_MfrLinkFake;
+    fbRackB  : FB_Rack;
+    fbSrmB   : FB_Srm(ipParent := 0, sNodeName := 'SrmBad');
+    fbMfrB   : FB_MfrInterface;
+    fbLinkB  : FB_MfrLinkFake;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[Encode_DefaultLayout_GivesTheDocumentedText();
+Decode_RoundTrip_GivesTheSameTelegram();
+Decode_WrongLength_IsRefused();
+Decode_LetterInNumberField_IsRefused();
+CustomLayout_ChangesLengthAndStillRoundTrips();
+Serve_ValidOrder_AnswersTackOverTheLink();
+Serve_BadFrame_AnswersTerr45();]]></ST>
+    </Implementation>
+    <Method Name="Order" Id="{473fa047-d850-ec35-960f-fd0f6a5dc745}">
+      <Declaration><![CDATA[// A transport order station -> place 2/4/3.
+METHOD PRIVATE Order : ST_Telegram
+VAR_INPUT
+    nSeq : UINT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[Order.sType := 'TORD';
+Order.nSeq  := nSeq;
+Order.nOrder := 1234;
+Order.sLeId := 'LE0042';
+Order.stSource.nSide := 1; Order.stSource.nColumn := 0; Order.stSource.nLevel := 1;
+Order.stTarget.nSide := 2; Order.stTarget.nColumn := 4; Order.stTarget.nLevel := 3;
+Order.nStatus := 0;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Encode_DefaultLayout_GivesTheDocumentedText" Id="{12ceb482-134f-4748-b76f-25c99bb55196}">
+      <Declaration><![CDATA[METHOD PRIVATE Encode_DefaultLayout_GivesTheDocumentedText
+VAR
+    sTxt : STRING(255);
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Encode_DefaultLayout_GivesTheDocumentedText');
+sTxt := fbCodec.Encode(Order(7));
+AssertEquals_INT(Expected := 52, Actual := LEN(sTxt), Message := 'default telegram is 52 characters');
+AssertEquals_STRING(Expected := 'TORD0000700001234LE0042              100001200403000', Actual := sTxt, Message := 'field order and padding');
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Decode_RoundTrip_GivesTheSameTelegram" Id="{758863f3-f3f2-53f9-0d1e-f2ecdfeab7d7}">
+      <Declaration><![CDATA[METHOD PRIVATE Decode_RoundTrip_GivesTheSameTelegram
+VAR
+    stIn, stOut : ST_Telegram;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Decode_RoundTrip_GivesTheSameTelegram');
+stIn := Order(7);
+AssertTrue(Condition := fbCodec.Decode(fbCodec.Encode(stIn), stOut), Message := 'own text must decode');
+AssertEquals_STRING(Expected := 'TORD', Actual := stOut.sType, Message := 'type');
+AssertEquals_UINT(Expected := 7, Actual := stOut.nSeq, Message := 'seq');
+AssertEquals_DINT(Expected := 1234, Actual := stOut.nOrder, Message := 'order');
+AssertEquals_STRING(Expected := 'LE0042', Actual := stOut.sLeId, Message := 'load unit without padding');
+AssertEquals_INT(Expected := 4, Actual := stOut.stTarget.nColumn, Message := 'target column');
+AssertEquals_INT(Expected := 3, Actual := stOut.stTarget.nLevel, Message := 'target level');
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Decode_WrongLength_IsRefused" Id="{afc09c79-ab3b-5684-27d5-8686bca8760c}">
+      <Declaration><![CDATA[METHOD PRIVATE Decode_WrongLength_IsRefused
+VAR
+    stOut : ST_Telegram;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Decode_WrongLength_IsRefused');
+AssertFalse(Condition := fbCodec.Decode('TORD0000700001234', stOut), Message := 'short frame');
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Decode_LetterInNumberField_IsRefused" Id="{f03dbbd1-a18a-252f-0f96-da11e23a7fd8}">
+      <Declaration><![CDATA[METHOD PRIVATE Decode_LetterInNumberField_IsRefused
+VAR
+    stOut : ST_Telegram;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Decode_LetterInNumberField_IsRefused');
+AssertFalse(Condition := fbCodec.Decode('TORD0000700001234LE0042              10000120X403000', stOut), Message := 'X in the target column');
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="CustomLayout_ChangesLengthAndStillRoundTrips" Id="{d4db405e-c258-bf90-744f-2edcf4a9cffb}">
+      <Declaration><![CDATA[METHOD PRIVATE CustomLayout_ChangesLengthAndStillRoundTrips
+VAR
+    stOut : ST_Telegram;
+    sTxt : STRING(255);
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('CustomLayout_ChangesLengthAndStillRoundTrips');
+fbCodec2.stLayout.nOrder := 6;
+fbCodec2.stLayout.nLeId  := 10;
+sTxt := fbCodec2.Encode(Order(9));
+AssertEquals_INT(Expected := 40, Actual := LEN(sTxt), Message := '52 - 2 - 10');
+AssertTrue(Condition := fbCodec2.Decode(sTxt, stOut), Message := 'decodes with the same layout');
+AssertEquals_DINT(Expected := 1234, Actual := stOut.nOrder, Message := 'order');
+AssertFalse(Condition := fbCodec.Decode(sTxt, stOut), Message := 'default layout refuses it');
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Serve_ValidOrder_AnswersTackOverTheLink" Id="{41219a58-ebf7-bacc-2dcd-cfb4865c1b54}">
+      <Declaration><![CDATA[METHOD PRIVATE Serve_ValidOrder_AnswersTackOverTheLink
+VAR
+    stStation : ST_SlotAddr := (nSide := 1, nColumn := 0, nLevel := 1);
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Serve_ValidOrder_AnswersTackOverTheLink');
+fbSrm.Init(fbRack);
+fbSrm.SetMode(E_OpMode.eAutomatic);
+fbMfr.Init(fbRack, fbSrm);
+fbRack.Put(stStation, 'LE0042');
+fbLink.Give(Order(1));
+fbMfr.Serve(fbLink);
+AssertEquals_INT(Expected := 1, Actual := fbLink.nSent, Message := 'one answer sent');
+AssertEquals_STRING(Expected := 'TACK', Actual := fbLink.aSent[1].sType, Message := 'order accepted');
+AssertEquals_DINT(Expected := 1234, Actual := fbLink.aSent[1].nOrder, Message := 'answer names the order');
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Serve_BadFrame_AnswersTerr45" Id="{7151932a-28a7-e750-e286-bbca36538edb}">
+      <Declaration><![CDATA[METHOD PRIVATE Serve_BadFrame_AnswersTerr45
+VAR
+    stBad : ST_Telegram;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Serve_BadFrame_AnswersTerr45');
+fbSrmB.Init(fbRackB);
+fbMfrB.Init(fbRackB, fbSrmB);
+stBad.sType := 'BAD';
+fbLinkB.Give(stBad);
+fbMfrB.Serve(fbLinkB);
+AssertEquals_STRING(Expected := 'TERR', Actual := fbLinkB.aSent[1].sType, Message := 'error answer');
+AssertEquals_INT(Expected := GVL_Mfr.cUnknownTelegram, Actual := fbLinkB.aSent[1].nStatus, Message := 'status 45');
+fbLinkB.Give(Order(1));
+fbMfrB.Serve(fbLinkB);
+AssertEquals_INT(Expected := GVL_Mfr.cSlotEmpty, Actual := fbLinkB.aSent[2].nStatus, Message := 'a bad frame does not use up sequence number 1');
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

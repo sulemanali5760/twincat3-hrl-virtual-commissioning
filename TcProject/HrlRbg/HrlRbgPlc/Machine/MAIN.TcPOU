@@ -1,23 +1,42 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <TcPlcObject Version="1.1.0.1">
   <POU Name="MAIN" Id="{b8e037f9-eaed-4553-9535-9f4c633c54c9}" SpecialFunc="None">
-    <Declaration><![CDATA[// MAIN - builds the plant, starts it in automatic and lets the MFR emulator
-// drive it. Watch fbPlant.fbSrm (positions, jobs) and fbPlant.fbRack online.
+    <Declaration><![CDATA[// MAIN - builds the plant from HrlConfig.json, runs it in the operating mode
+// the HMI asks for (eModeRequest), forced to stop while the safety interface
+// does not allow motion. With mfr.link = emulator the MFR emulator drives it.
+// Watch fbPlant.fbSrm (positions, jobs), fbPlant.fbRack and fbPlant.fbDiag online.
 PROGRAM MAIN
 VAR
-    fbPlant    : FB_Hrl(ipParent := 0, sNodeName := 'HRL');
-    fbOpMode   : FB_OpModeHandler;
-    fbEmulator : FB_MfrEmulator;
-    bInit      : BOOL := TRUE;
+    fbPlant      : FB_Hrl(ipParent := 0, sNodeName := 'HRL');
+    fbOpMode     : FB_OpModeHandler;
+    fbEmulator   : FB_MfrEmulator;
+    fbConfig     : FB_HrlConfig;   // HrlConfig.json from the boot folder; defaults if absent
+    fbHmi        : FB_HmiBridge;   // GVL_Hmi <-> plant
+    eModeNow     : E_OpMode;
+    bInit        : BOOL := TRUE;
 END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[IF bInit THEN
+    fbConfig();
+    IF NOT fbConfig.bDone THEN
+        RETURN;   // the plant starts only with its final configuration
+    END_IF
+    fbPlant.stConfig     := fbConfig.stConfig;
+    fbPlant.sConfigError := fbConfig.sError;
     fbOpMode.SetRoot(fbPlant);
-    fbOpMode.Mode := E_OpMode.eAutomatic;
     bInit := FALSE;
 END_IF
 
-fbEmulator.Run(fbPlant);
+fbHmi.Run(fbPlant, fbEmulator, GVL_Hmi.stCommand, GVL_Hmi.stStatus, eModeNow);
+IF fbPlant.bSafetyOk THEN
+    eModeNow := fbHmi.eModeRequest;
+ELSE
+    eModeNow := E_OpMode.eStop;   // safety first: no motion without the safety OK
+END_IF
+fbOpMode.Mode := eModeNow;
+IF fbPlant.stConfig.eMfrLink = E_MfrLink.eEmulator THEN
+    fbEmulator.Run(fbPlant);   // no real MFR: the emulator sends the orders
+END_IF
 fbOpMode.Cyclic();]]></ST>
     </Implementation>
   </POU>

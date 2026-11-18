@@ -1,0 +1,15 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="E_JogAxis" Id="{84e3cc36-13e1-045d-34c6-93772e773ecc}">
+    <Declaration><![CDATA[// Axis the operator jogs in manual mode.
+{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE E_JogAxis :
+(
+    eTravel := 0,
+    eHoist  := 1,
+    eFork   := 2
+) INT;
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

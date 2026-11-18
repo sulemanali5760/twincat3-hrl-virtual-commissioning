@@ -1,0 +1,17 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_SafetyStatus" Id="{b03da424-f409-64b7-7aaa-7cdb04d4f5cf}">
+    <Declaration><![CDATA[// Status bits the safety controller (e.g. TwinSAFE logic) gives the standard
+// PLC. The standard PLC only reads them: it never switches safety itself.
+// Map each bit to the TwinSAFE group output (see docs/safety/README.md).
+TYPE ST_SafetyStatus :
+STRUCT
+    bSafetyRun  : BOOL;   // safety program running, no group error
+    bEStopOk    : BOOL;   // all emergency stops released
+    bDoorClosed : BOOL;   // aisle access door closed
+    bDoorLocked : BOOL;   // aisle access door guard-locked
+    bStoOk      : BOOL;   // drives not in Safe Torque Off
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

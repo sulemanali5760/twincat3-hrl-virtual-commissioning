@@ -1,0 +1,76 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_TeachIn" Id="{b2492db7-cb6f-da12-df1a-149f9e8540a8}" SpecialFunc="None">
+    <Declaration><![CDATA[// FB_TeachIn - guided teach-in of rack places, in manual mode:
+//   1. Start(place): the RBG drives to the nominal position from the drawing.
+//   2. The operator jogs travel / hoist until the fork lines up with the beams.
+//   3. Confirm(): the measured position is stored in the rack, or refused if it
+//      is further than the teach tolerance from the drawing (check the rack).
+FUNCTION_BLOCK FB_TeachIn
+VAR_OUTPUT
+    stPlace       : ST_SlotAddr;   // place being taught
+    bActive       : BOOL;          // a place is selected
+    nTaught       : INT;
+    nRejected     : INT;
+    bLastRejected : BOOL;
+END_VAR
+VAR
+    refRack : REFERENCE TO FB_Rack;
+    refSrm  : REFERENCE TO FB_Srm;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name="Init" Id="{89ae92d7-e66b-0c05-3c1a-2f7ff04d2518}">
+      <Declaration><![CDATA[METHOD PUBLIC Init
+VAR_INPUT
+    fbRackRef : REFERENCE TO FB_Rack;
+    fbSrmRef  : REFERENCE TO FB_Srm;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[refRack REF= fbRackRef;
+refSrm  REF= fbSrmRef;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Start" Id="{48f0f6fb-e799-c3c5-b3d2-3dee133aa8e7}">
+      <Declaration><![CDATA[// Select a place and drive to its nominal position. FALSE for an invalid
+// place, the station, or an RBG that cannot move now.
+METHOD PUBLIC Start : BOOL
+VAR_INPUT
+    stAddr : ST_SlotAddr;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF NOT __ISVALIDREF(refRack) OR NOT __ISVALIDREF(refSrm) THEN
+    RETURN;
+END_IF
+IF NOT refRack.IsValid(stAddr) OR refRack.IsStation(stAddr) THEN
+    RETURN;
+END_IF
+IF refSrm.GotoXY(refRack.NominalX(stAddr), refRack.NominalY(stAddr)) THEN
+    stPlace := stAddr;
+    bActive := TRUE;
+    Start   := TRUE;
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Confirm" Id="{cd02b610-1530-bf44-c457-b973b81d1f9e}">
+      <Declaration><![CDATA[// Store where the RBG stands now as the position of the selected place.
+METHOD PUBLIC Confirm : BOOL
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF NOT bActive OR_ELSE refSrm.bGotoActive THEN
+    RETURN;   // nothing selected, or still driving there
+END_IF
+bLastRejected := NOT refRack.Teach(stPlace, refSrm.TravelPos, refSrm.HoistPos);
+IF bLastRejected THEN
+    nRejected := nRejected + 1;
+ELSE
+    nTaught := nTaught + 1;
+    bActive := FALSE;
+    Confirm := TRUE;
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

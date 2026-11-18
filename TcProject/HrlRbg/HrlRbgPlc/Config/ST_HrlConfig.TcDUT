@@ -1,0 +1,24 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_HrlConfig" Id="{29be6519-7446-7d88-890f-f5ec0e7a0f40}">
+    <Declaration><![CDATA[// Everything an integrator sets per plant. Loaded from HrlConfig.json by
+// FB_HrlConfig; every default here is the practice plant, so a missing file
+// or a missing entry still gives a working demo.
+TYPE ST_HrlConfig :
+STRUCT
+    stRack    : ST_RackConfig;
+    eAxisKind : E_AxisKind := E_AxisKind.eSim;
+    stTravel  : ST_AxisConfig := (lrVelocity := 3.0, lrAccel := 0.6);
+    stHoist   : ST_AxisConfig := (lrVelocity := 1.5, lrAccel := 0.8);
+    stFork    : ST_AxisConfig := (lrVelocity := 0.6, lrAccel := 0.6);
+    stInfeed  : ST_ZoneConfig;
+    stOutfeed : ST_ZoneConfig := (lrLength := 2.4, lrSpeed := 0.2, lrJamTimeout := 20.0, bSimulate := TRUE);
+    lrAckTimeout : LREAL := 5.0;   // MFR must acknowledge TDON within this [s]
+    eMfrLink     : E_MfrLink := E_MfrLink.eEmulator;
+    nMfrPort     : UINT := 2000;    // TCP port the PLC listens on (eTcp)
+    stLayout     : ST_TelegramLayout;
+    bSafetySimulate : BOOL := TRUE;   // bench without safety controller (never on a real machine)
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

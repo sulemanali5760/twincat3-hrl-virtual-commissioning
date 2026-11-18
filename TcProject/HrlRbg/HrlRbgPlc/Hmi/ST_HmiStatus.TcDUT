@@ -1,0 +1,32 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_HmiStatus" Id="{bc8b077b-3f4c-a58c-150d-dabc63be8b20}">
+    <Declaration><![CDATA[// Everything the HMI shows (PLC -> HMI). Filled by MAIN every cycle.
+TYPE ST_HmiStatus :
+STRUCT
+    nMode          : INT;          // 0 stop, 1 manual, 2 homing, 3 automatic (E_OpMode)
+    bSafetyOk      : BOOL;
+    lrTravelPos    : LREAL;        // [m]
+    lrHoistPos     : LREAL;        // [m]
+    lrForkPos      : LREAL;        // [m]
+    bBusy          : BOOL;         // RBG job running
+    bFault         : BOOL;         // RBG fault, needs reset
+    bJogBlocked    : BOOL;         // jog refused: fork not centred
+    sLeOnFork      : STRING(20);
+    nJobsDone      : DINT;
+    nStored        : DINT;         // emulator counters
+    nRetrieved     : DINT;
+    bMfrConnected  : BOOL;         // TCP link (always FALSE with the emulator)
+    nActiveFaults  : INT;
+    sFault1        : STRING(80);   // first four active faults, cause - remedy
+    sFault2        : STRING(80);
+    sFault3        : STRING(80);
+    sFault4        : STRING(80);
+    bTeachActive   : BOOL;
+    nTaught        : INT;
+    bTeachRejected : BOOL;
+    sConfigError   : STRING(120);
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

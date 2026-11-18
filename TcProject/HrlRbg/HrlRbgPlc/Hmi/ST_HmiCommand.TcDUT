@@ -1,0 +1,25 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_HmiCommand" Id="{9b293a13-77f4-11b1-29da-0ea5d1968f7b}">
+    <Declaration><![CDATA[// Everything the HMI may command (HMI -> PLC). Buttons that trigger an action
+// (teach start/confirm, resets) are evaluated on the rising edge in MAIN.
+TYPE ST_HmiCommand :
+STRUCT
+    bModeStop     : BOOL;       // mode buttons: TRUE while pressed (button state symbol)
+    bModeManual   : BOOL;
+    bModeHoming   : BOOL;
+    bModeAuto     : BOOL;
+    nJogAxis      : INT;        // 0 travel, 1 hoist, 2 fork
+    bJogFwd       : BOOL;       // held while the button is pressed
+    bJogBwd       : BOOL;
+    nTeachSide    : INT := 1;
+    nTeachColumn  : INT := 1;
+    nTeachLevel   : INT := 1;
+    bTeachStart   : BOOL;
+    bTeachConfirm : BOOL;
+    bResetFault   : BOOL;       // RBG fault reset
+    bSafetyReset  : BOOL;       // safety acknowledge
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

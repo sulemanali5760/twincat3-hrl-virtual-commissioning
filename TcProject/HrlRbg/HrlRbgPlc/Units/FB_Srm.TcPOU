@@ -11,6 +11,16 @@
 //   travel+hoist to target (loaded, lifted) -> fork out -> lower -> fork in.
 // Two jobs back to back (store, then retrieve) make a double cycle.
 FUNCTION_BLOCK FB_Srm EXTENDS FB_ModeNode
+VAR_INPUT
+    eAxisKind : E_AxisKind := E_AxisKind.eSim;   // simulated axes or NC axes
+    stTravelCfg : ST_AxisConfig := (lrVelocity := 3.0, lrAccel := 0.6);
+    stHoistCfg  : ST_AxisConfig := (lrVelocity := 1.5, lrAccel := 0.8);
+    stForkCfg   : ST_AxisConfig := (lrVelocity := 0.6, lrAccel := 0.6);
+    // Manual mode (HMI): hold bJogFwd / bJogBwd to move eJogAxis, release to stop.
+    eJogAxis : E_JogAxis := E_JogAxis.eTravel;
+    bJogFwd  : BOOL;
+    bJogBwd  : BOOL;
+END_VAR
 VAR_OUTPUT
     bBusy         : BOOL;         // a job is running
     bJobDone      : BOOL;         // last job finished; stays TRUE until the next StartJob
@@ -18,18 +28,28 @@ VAR_OUTPUT
     nJobsDone     : DINT;
     lrLastJobTime : LREAL;        // simulated duration of the last job [s]
     sLeOnFork     : STRING(20);   // load unit currently on the fork
+    bJogBlocked   : BOOL;         // jog refused: fork not centred for travel / hoist
+    bGotoActive   : BOOL;         // manual: driving to a GotoXY target (teach-in)
 END_VAR
 VAR
     fbTravel : FB_Axis(ipParent := THIS^, sNodeName := 'Travel');
     fbHoist  : FB_Axis(ipParent := THIS^, sNodeName := 'Hoist');
     fbFork   : FB_Axis(ipParent := THIS^, sNodeName := 'Fork');
+    fbTravelNc : FB_AxisNc(ipParent := THIS^, sNodeName := 'TravelNc');
+    fbHoistNc  : FB_AxisNc(ipParent := THIS^, sNodeName := 'HoistNc');
+    fbForkNc   : FB_AxisNc(ipParent := THIS^, sNodeName := 'ForkNc');
+    ipTravel : I_Axis;   // the axes the sequence uses, chosen by eAxisKind
+    ipHoist  : I_Axis;
+    ipFork   : I_Axis;
     fbCycle  : FB_CycleManager;
     refRack  : REFERENCE TO FB_Rack;
     stSource : ST_SlotAddr;
     stTarget : ST_SlotAddr;
     bJobPending : BOOL;
     lrJobTime   : LREAL;
-    bConfigured : BOOL;
+    lrGotoX     : LREAL;
+    lrGotoY     : LREAL;
+    bJogging    : BOOL;
 END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[]]></ST>
@@ -76,9 +96,10 @@ METHOD PUBLIC ResetFault
 VAR_INPUT
 END_VAR]]></Declaration>
       <Implementation>
-        <ST><![CDATA[fbTravel.Reset();
-fbHoist.Reset();
-fbFork.Reset();
+        <ST><![CDATA[SelectAxes();
+ipTravel.Reset();
+ipHoist.Reset();
+ipFork.Reset();
 fbCycle.Reset();
 bFault      := FALSE;
 bJobPending := FALSE;]]></ST>
@@ -95,8 +116,8 @@ VAR
     eX, eY : E_CmdResult;
 END_VAR]]></Declaration>
       <Implementation>
-        <ST><![CDATA[eX := fbTravel.MoveAbs(lrX);
-eY := fbHoist.MoveAbs(lrY);
+        <ST><![CDATA[eX := ipTravel.MoveAbs(lrX);
+eY := ipHoist.MoveAbs(lrY);
 IF eX = E_CmdResult.eError OR eY = E_CmdResult.eError THEN
     MoveXY := E_CmdResult.eError;
 ELSIF eX = E_CmdResult.eDone AND eY = E_CmdResult.eDone THEN
@@ -114,9 +135,9 @@ VAR_INPUT
 END_VAR]]></Declaration>
       <Implementation>
         <ST><![CDATA[IF stAddr.nSide = 2 THEN
-    ForkPos := GVL_Rack.cForkStroke;
+    ForkPos := refRack.stCfg.lrForkStroke;
 ELSE
-    ForkPos := -GVL_Rack.cForkStroke;
+    ForkPos := -refRack.stCfg.lrForkStroke;
 END_IF]]></ST>
       </Implementation>
     </Method>
@@ -125,13 +146,14 @@ END_IF]]></ST>
 VAR_INPUT
 END_VAR]]></Declaration>
       <Implementation>
-        <ST><![CDATA[IF NOT bConfigured THEN
-    // Axis data of the practice RBG (in the range of a pallet RBG).
-    fbTravel.lrVelocity := 3.0;   fbTravel.lrAccel := 0.6;
-    fbHoist.lrVelocity  := 1.5;   fbHoist.lrAccel  := 0.8;
-    fbFork.lrVelocity   := 0.6;   fbFork.lrAccel   := 0.6;
-    bConfigured := TRUE;
-END_IF
+        <ST><![CDATA[SelectAxes();
+// Axis data from the configuration (defaults = the practice RBG).
+fbTravel.lrVelocity   := stTravelCfg.lrVelocity;  fbTravel.lrAccel   := stTravelCfg.lrAccel;
+fbHoist.lrVelocity    := stHoistCfg.lrVelocity;   fbHoist.lrAccel    := stHoistCfg.lrAccel;
+fbFork.lrVelocity     := stForkCfg.lrVelocity;    fbFork.lrAccel     := stForkCfg.lrAccel;
+fbTravelNc.lrVelocity := stTravelCfg.lrVelocity;  fbTravelNc.lrAccel := stTravelCfg.lrAccel;
+fbHoistNc.lrVelocity  := stHoistCfg.lrVelocity;   fbHoistNc.lrAccel  := stHoistCfg.lrAccel;
+fbForkNc.lrVelocity   := stForkCfg.lrVelocity;    fbForkNc.lrAccel   := stForkCfg.lrAccel;
 IF bJobPending THEN
     lrJobTime := lrJobTime + fbTravel.lrCycleTime;
 END_IF
@@ -151,18 +173,18 @@ END_IF
 fbCycle.Call(bExecute := bJobPending);
 CASE fbCycle.Step OF
     0:  fbCycle.Await(MoveXY(refRack.TargetX(stSource), refRack.TargetY(stSource)));
-    1:  fbCycle.Await(fbFork.MoveAbs(ForkPos(stSource)));
-    2:  IF fbCycle.Await(fbHoist.MoveAbs(refRack.TargetY(stSource) + GVL_Rack.cLiftStroke)) THEN
+    1:  fbCycle.Await(ipFork.MoveAbs(ForkPos(stSource)));
+    2:  IF fbCycle.Await(ipHoist.MoveAbs(refRack.TargetY(stSource) + refRack.stCfg.lrLiftStroke)) THEN
             sLeOnFork := refRack.Take(stSource);   // pallet is now on the fork
         END_IF
-    3:  fbCycle.Await(fbFork.MoveAbs(0.0));
-    4:  fbCycle.Await(MoveXY(refRack.TargetX(stTarget), refRack.TargetY(stTarget) + GVL_Rack.cLiftStroke));
-    5:  fbCycle.Await(fbFork.MoveAbs(ForkPos(stTarget)));
-    6:  IF fbCycle.Await(fbHoist.MoveAbs(refRack.TargetY(stTarget))) THEN
+    3:  fbCycle.Await(ipFork.MoveAbs(0.0));
+    4:  fbCycle.Await(MoveXY(refRack.TargetX(stTarget), refRack.TargetY(stTarget) + refRack.stCfg.lrLiftStroke));
+    5:  fbCycle.Await(ipFork.MoveAbs(ForkPos(stTarget)));
+    6:  IF fbCycle.Await(ipHoist.MoveAbs(refRack.TargetY(stTarget))) THEN
             refRack.Put(stTarget, sLeOnFork);      // pallet is on the beams
             sLeOnFork := '';
         END_IF
-    7:  IF fbCycle.Await(fbFork.MoveAbs(0.0)) THEN
+    7:  IF fbCycle.Await(ipFork.MoveAbs(0.0)) THEN
             bJobPending   := FALSE;
             bJobDone      := TRUE;
             nJobsDone     := nJobsDone + 1;
@@ -181,8 +203,11 @@ METHOD PROTECTED RunHoming
 VAR_INPUT
 END_VAR]]></Declaration>
       <Implementation>
-        <ST><![CDATA[IF fbFork.MoveAbs(0.0) = E_CmdResult.eDone THEN
-    MoveXY(0.0, GVL_Rack.cOffsetY);
+        <ST><![CDATA[IF NOT __ISVALIDREF(refRack) THEN
+    RETURN;
+END_IF
+IF ipFork.MoveAbs(0.0) = E_CmdResult.eDone THEN
+    MoveXY(0.0, refRack.stCfg.lrOffsetY);
 END_IF]]></ST>
       </Implementation>
     </Method>
@@ -192,7 +217,8 @@ END_IF]]></ST>
         <Declaration><![CDATA[VAR
 END_VAR]]></Declaration>
         <Implementation>
-          <ST><![CDATA[TravelPos := fbTravel.lrActPos;]]></ST>
+          <ST><![CDATA[SelectAxes();
+TravelPos := ipTravel.ActPos;]]></ST>
         </Implementation>
       </Get>
     </Property>
@@ -202,7 +228,8 @@ END_VAR]]></Declaration>
         <Declaration><![CDATA[VAR
 END_VAR]]></Declaration>
         <Implementation>
-          <ST><![CDATA[HoistPos := fbHoist.lrActPos;]]></ST>
+          <ST><![CDATA[SelectAxes();
+HoistPos := ipHoist.ActPos;]]></ST>
         </Implementation>
       </Get>
     </Property>
@@ -212,7 +239,8 @@ END_VAR]]></Declaration>
         <Declaration><![CDATA[VAR
 END_VAR]]></Declaration>
         <Implementation>
-          <ST><![CDATA[ForkActPos := fbFork.lrActPos;]]></ST>
+          <ST><![CDATA[SelectAxes();
+ForkActPos := ipFork.ActPos;]]></ST>
         </Implementation>
       </Get>
     </Property>
@@ -224,6 +252,116 @@ VAR_INPUT
 END_VAR]]></Declaration>
       <Implementation>
         <ST><![CDATA[fbTravel.bDriveFault := bFaultOn;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="GotoXY" Id="{31ac78c6-ef29-b094-2ce3-a51d916ae99a}">
+      <Declaration><![CDATA[// Manual mode: drive travel and hoist to a position (fork stays centred).
+// Used by teach-in to go to the nominal position of a place.
+METHOD PUBLIC GotoXY : BOOL
+VAR_INPUT
+    lrX : LREAL;
+    lrY : LREAL;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF bFault OR bJobPending THEN
+    RETURN;
+END_IF
+lrGotoX     := lrX;
+lrGotoY     := lrY;
+bGotoActive := TRUE;
+GotoXY      := TRUE;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="RunManual" Id="{af53ba23-f661-b3aa-dafb-41b450c9687a}">
+      <Declaration><![CDATA[// Jog one axis while a button is held; travel and hoist only with the fork
+// centred (a fork in the rack would hit the uprights). A GotoXY target has
+// priority over jogging.
+METHOD PROTECTED RunManual
+VAR_INPUT
+END_VAR
+VAR
+    ipAx    : I_Axis;
+    lrLimit : LREAL;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF NOT __ISVALIDREF(refRack) THEN
+    RETURN;
+END_IF
+IF bGotoActive THEN
+    IF ABS(ipFork.ActPos) > 0.005 THEN
+        ipFork.MoveAbs(0.0);
+    ELSIF MoveXY(lrGotoX, lrGotoY) <> E_CmdResult.eBusy THEN
+        bGotoActive := FALSE;
+    END_IF
+    RETURN;
+END_IF
+CASE eJogAxis OF
+    E_JogAxis.eTravel:
+        ipAx := ipTravel;
+        IF bJogFwd THEN
+            lrLimit := refRack.stCfg.lrOffsetX + INT_TO_LREAL(refRack.stCfg.nColumns - 1) * refRack.stCfg.lrPitchX;
+        ELSE
+            lrLimit := 0.0;
+        END_IF
+    E_JogAxis.eHoist:
+        ipAx := ipHoist;
+        IF bJogFwd THEN
+            lrLimit := refRack.stCfg.lrOffsetY + INT_TO_LREAL(refRack.stCfg.nLevels - 1) * refRack.stCfg.lrPitchY
+                       + refRack.stCfg.lrLiftStroke;
+        ELSE
+            lrLimit := refRack.stCfg.lrOffsetY;
+        END_IF
+    E_JogAxis.eFork:
+        ipAx := ipFork;
+        IF bJogFwd THEN
+            lrLimit := refRack.stCfg.lrForkStroke;
+        ELSE
+            lrLimit := -refRack.stCfg.lrForkStroke;
+        END_IF
+END_CASE
+bJogBlocked := eJogAxis <> E_JogAxis.eFork AND ABS(ipFork.ActPos) > 0.005 AND (bJogFwd OR bJogBwd);
+IF (bJogFwd XOR bJogBwd) AND NOT bJogBlocked THEN
+    ipAx.MoveAbs(lrLimit);   // runs towards the soft limit while held
+    bJogging := TRUE;
+ELSIF bJogging THEN
+    ipAx.Halt();
+    bJogging := FALSE;
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="RunStop" Id="{1f0e9b52-95a2-0a24-e0a8-708918f93ec8}">
+      <Declaration><![CDATA[// Stop mode: every axis halts. A running job stays pending and the sequence
+// resumes from its current step when the mode is set back to automatic.
+METHOD PROTECTED RunStop
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[ipTravel.Halt();
+ipHoist.Halt();
+ipFork.Halt();
+bGotoActive := FALSE;
+bJogging    := FALSE;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="SelectAxes" Id="{ae48620f-9e66-7649-aeae-7608eb506335}">
+      <Declaration><![CDATA[// Point the sequence at the simulated or the NC axes. Only the chosen NC
+// axes are enabled, so an unlinked NC axis never raises errors in simulation.
+METHOD PRIVATE SelectAxes
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[fbTravelNc.bEnable := eAxisKind = E_AxisKind.eNc;
+fbHoistNc.bEnable  := fbTravelNc.bEnable;
+fbForkNc.bEnable   := fbTravelNc.bEnable;
+IF fbTravelNc.bEnable THEN
+    ipTravel := fbTravelNc;
+    ipHoist  := fbHoistNc;
+    ipFork   := fbForkNc;
+ELSE
+    ipTravel := fbTravel;
+    ipHoist  := fbHoist;
+    ipFork   := fbFork;
+END_IF]]></ST>
       </Implementation>
     </Method>
   </POU>

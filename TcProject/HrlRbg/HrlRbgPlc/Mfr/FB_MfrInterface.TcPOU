@@ -27,6 +27,7 @@ VAR
     nLastOrder   : DINT;
     bAwaitAck    : BOOL;
     lrAckWait    : LREAL;
+    nOutboxSent  : DINT;   // outbox telegrams already handed to the link
 END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[]]></ST>
@@ -171,5 +172,39 @@ END_VAR]]></Declaration>
         </Implementation>
       </Get>
     </Property>
+    <Method Name="Serve" Id="{561ba544-afe2-620e-72ad-5e3aaea9c2d9}">
+      <Declaration><![CDATA[// Call every cycle when the MFR is a real system: takes one telegram from the
+// link, runs the same checks as Receive() and sends the answer, then sends any
+// new unsolicited telegram (TDON / TERR) from the outbox. An undecodable frame
+// is answered with TERR 45 without touching the sequence count.
+METHOD PUBLIC Serve
+VAR_INPUT
+    ipLink : I_MfrLink;
+END_VAR
+VAR
+    stIn    : ST_Telegram;
+    stReply : ST_Telegram;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF ipLink = 0 THEN
+    RETURN;
+END_IF
+IF ipLink.Poll(stIn) THEN
+    IF stIn.sType = 'BAD' THEN
+        stReply := Reply('TERR', stIn, GVL_Mfr.cUnknownTelegram);
+    ELSE
+        stReply := Receive(stIn);
+    END_IF
+    IF stReply.sType <> '' THEN
+        ipLink.Send(stReply);
+    END_IF
+END_IF
+IF nOutboxCount <> nOutboxSent AND ipLink.Connected THEN
+    IF ipLink.Send(stOutbox) THEN
+        nOutboxSent := nOutboxCount;
+    END_IF
+END_IF]]></ST>
+      </Implementation>
+    </Method>
   </POU>
 </TcPlcObject>

@@ -1,0 +1,120 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_HrlConfig_Test" Id="{8548ffda-77c4-9ad1-7833-fd3ef7f59dd2}" SpecialFunc="None">
+    <Declaration><![CDATA[// Tests for the plant configuration: parsing, range checks, defaults, and a
+// rack of a different size built from the configuration without code changes.
+FUNCTION_BLOCK FB_HrlConfig_Test EXTENDS TcUnit.FB_TestSuite
+VAR
+    fbCfgOk    : FB_HrlConfig;
+    fbCfgBad   : FB_HrlConfig;
+    fbCfgEmpty : FB_HrlConfig;
+    fbCfgJunk  : FB_HrlConfig;
+    fbSmallRack : FB_Rack;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[Parse_ValidJson_SetsEveryGroup();
+Parse_OutOfRangeValue_IsRejectedAndKeepsDefaults();
+Parse_EmptyObject_GivesThePracticePlant();
+Parse_NotJson_IsRejected();
+SmallRack_FromConfig_LimitsAddressesAndSearch();]]></ST>
+    </Implementation>
+    <Method Name="Parse_ValidJson_SetsEveryGroup" Id="{515cd607-8eca-917b-6fe5-a80b3c7e5016}">
+      <Declaration><![CDATA[METHOD PRIVATE Parse_ValidJson_SetsEveryGroup
+VAR
+    sJson : STRING(1000) := '{"rack":{"sides":1,"columns":10,"levels":4,"pitchX":1.2},"axes":{"kind":"nc","travel":{"velocity":2.5,"accel":0.5}},"conveyors":{"infeed":{"length":1.8,"simulate":false}},"mfr":{"ackTimeout":8}}';
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Parse_ValidJson_SetsEveryGroup');
+AssertTrue(Condition := fbCfgOk.Parse(sJson), Message := 'valid config must parse');
+AssertEquals_INT(Expected := 1, Actual := fbCfgOk.stConfig.stRack.nSides, Message := 'sides');
+AssertEquals_INT(Expected := 10, Actual := fbCfgOk.stConfig.stRack.nColumns, Message := 'columns');
+AssertEquals_INT(Expected := 4, Actual := fbCfgOk.stConfig.stRack.nLevels, Message := 'levels');
+AssertEquals_LREAL(Expected := 1.2, Actual := fbCfgOk.stConfig.stRack.lrPitchX, Delta := 1.0E-9, Message := 'pitchX');
+AssertEquals_LREAL(Expected := GVL_Rack.cPitchY, Actual := fbCfgOk.stConfig.stRack.lrPitchY, Delta := 1.0E-9, Message := 'missing pitchY keeps the default');
+AssertTrue(Condition := fbCfgOk.stConfig.eAxisKind = E_AxisKind.eNc, Message := 'axes.kind nc');
+AssertEquals_LREAL(Expected := 2.5, Actual := fbCfgOk.stConfig.stTravel.lrVelocity, Delta := 1.0E-9, Message := 'travel velocity');
+AssertEquals_LREAL(Expected := 1.5, Actual := fbCfgOk.stConfig.stHoist.lrVelocity, Delta := 1.0E-9, Message := 'hoist keeps the default');
+AssertEquals_LREAL(Expected := 1.8, Actual := fbCfgOk.stConfig.stInfeed.lrLength, Delta := 1.0E-9, Message := 'infeed length');
+AssertFalse(Condition := fbCfgOk.stConfig.stInfeed.bSimulate, Message := 'infeed on real inputs');
+AssertEquals_LREAL(Expected := 2.4, Actual := fbCfgOk.stConfig.stOutfeed.lrLength, Delta := 1.0E-9, Message := 'outfeed keeps the default');
+AssertEquals_LREAL(Expected := 8.0, Actual := fbCfgOk.stConfig.lrAckTimeout, Delta := 1.0E-9, Message := 'ack timeout');
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Parse_OutOfRangeValue_IsRejectedAndKeepsDefaults" Id="{ec7df31a-ad9b-e2e0-0ab9-d70f9b4f54e4}">
+      <Declaration><![CDATA[METHOD PRIVATE Parse_OutOfRangeValue_IsRejectedAndKeepsDefaults
+VAR
+    sJson : STRING(255) := '{"rack":{"columns":99},"axes":{"travel":{"velocity":2.0}}}';
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Parse_OutOfRangeValue_IsRejectedAndKeepsDefaults');
+AssertFalse(Condition := fbCfgBad.Parse(sJson), Message := '99 columns exceeds cMaxColumns');
+AssertTrue(Condition := fbCfgBad.bError, Message := 'bError set');
+AssertEquals_STRING(Expected := 'rack.columns out of range', Actual := fbCfgBad.sError, Message := 'error names the value');
+AssertEquals_INT(Expected := GVL_Rack.cColumns, Actual := fbCfgBad.stConfig.stRack.nColumns, Message := 'columns stay default');
+AssertEquals_LREAL(Expected := 3.0, Actual := fbCfgBad.stConfig.stTravel.lrVelocity, Delta := 1.0E-9, Message := 'a bad file never half-applies');
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Parse_EmptyObject_GivesThePracticePlant" Id="{e796aad2-71b9-e02a-5c60-15f9ed39d337}">
+      <Declaration><![CDATA[METHOD PRIVATE Parse_EmptyObject_GivesThePracticePlant
+VAR
+    sJson : STRING(10) := '{}';
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Parse_EmptyObject_GivesThePracticePlant');
+AssertTrue(Condition := fbCfgEmpty.Parse(sJson), Message := 'empty object is valid');
+AssertEquals_INT(Expected := GVL_Rack.cColumns, Actual := fbCfgEmpty.stConfig.stRack.nColumns, Message := 'default columns');
+AssertTrue(Condition := fbCfgEmpty.stConfig.eAxisKind = E_AxisKind.eSim, Message := 'default axes are simulated');
+AssertTrue(Condition := fbCfgEmpty.stConfig.stInfeed.bSimulate, Message := 'default conveyors are simulated');
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Parse_NotJson_IsRejected" Id="{b4e1045a-433c-b133-c5ac-4561d85c7f69}">
+      <Declaration><![CDATA[METHOD PRIVATE Parse_NotJson_IsRejected
+VAR
+    sJson : STRING(40) := 'columns = 10';
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Parse_NotJson_IsRejected');
+AssertFalse(Condition := fbCfgJunk.Parse(sJson), Message := 'plain text is not a config');
+AssertTrue(Condition := fbCfgJunk.bError, Message := 'bError set');
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="SmallRack_FromConfig_LimitsAddressesAndSearch" Id="{5fcea18d-a6b8-c621-06a9-d7f30a4b07b3}">
+      <Declaration><![CDATA[METHOD PRIVATE SmallRack_FromConfig_LimitsAddressesAndSearch
+VAR
+    stAddr : ST_SlotAddr;
+    stFree : ST_SlotAddr;
+    nCol, nLvl, nSide : INT;
+    nPut : INT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('SmallRack_FromConfig_LimitsAddressesAndSearch');
+fbSmallRack.stCfg.nSides   := 2;
+fbSmallRack.stCfg.nColumns := 10;
+fbSmallRack.stCfg.nLevels  := 4;
+stAddr.nSide := 1; stAddr.nColumn := 10; stAddr.nLevel := 4;
+AssertTrue(Condition := fbSmallRack.IsValid(stAddr), Message := 'last place of a 10x4 rack is valid');
+stAddr.nColumn := 11;
+AssertFalse(Condition := fbSmallRack.IsValid(stAddr), Message := 'column 11 does not exist');
+stAddr.nColumn := 1; stAddr.nLevel := 5;
+AssertFalse(Condition := fbSmallRack.IsValid(stAddr), Message := 'level 5 does not exist');
+FOR nCol := 1 TO 10 DO
+    FOR nLvl := 1 TO 4 DO
+        FOR nSide := 1 TO 2 DO
+            stAddr.nSide := nSide; stAddr.nColumn := nCol; stAddr.nLevel := nLvl;
+            IF fbSmallRack.Put(stAddr, 'LE') THEN
+                nPut := nPut + 1;
+            END_IF
+        END_FOR
+    END_FOR
+END_FOR
+AssertEquals_INT(Expected := 80, Actual := nPut, Message := '2 x 10 x 4 places');
+AssertFalse(Condition := fbSmallRack.FindFree(stFree), Message := 'full small rack has no free place');
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

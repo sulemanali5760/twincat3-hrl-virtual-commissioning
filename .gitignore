@@ -13,3 +13,8 @@ _Libraries/
 # Machine-specific: licence and XAE lock files
 *.tclrs
 *.~u
+
+# TwinCAT HMI: NuGet packages and engineering server state (restored by XAE)
+Packages/
+.engineering_servers/
+*.hmiproj.user

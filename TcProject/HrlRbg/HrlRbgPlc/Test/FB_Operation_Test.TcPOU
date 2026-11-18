@@ -1,0 +1,170 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_Operation_Test" Id="{df23c097-7bc8-2711-ee4d-b5701001d376}" SpecialFunc="None">
+    <Declaration><![CDATA[// Tests for operation and commissioning: manual jog with interlock, guided
+// teach-in, stop and resume of a job, and the fault list. Simulated axes,
+// simulated time (whole scenario inside one PLC cycle).
+FUNCTION_BLOCK FB_Operation_Test EXTENDS TcUnit.FB_TestSuite
+VAR
+    fbRackJog : FB_Rack;
+    fbSrmJog  : FB_Srm(ipParent := 0, sNodeName := 'SrmJog');
+    fbRackLock : FB_Rack;
+    fbSrmLock  : FB_Srm(ipParent := 0, sNodeName := 'SrmLock');
+    fbRackTeach : FB_Rack;
+    fbSrmTeach  : FB_Srm(ipParent := 0, sNodeName := 'SrmTeach');
+    fbTeach     : FB_TeachIn;
+    fbRackStop : FB_Rack;
+    fbSrmStop  : FB_Srm(ipParent := 0, sNodeName := 'SrmStop');
+    fbDiag : FB_Diag;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[Jog_Travel_MovesWhileHeldAndStopsOnRelease();
+Jog_TravelWithForkOut_IsBlocked();
+TeachIn_AtNominal_IsStoredAndFarOff_IsRefused();
+Stop_DuringJob_HaltsAndAutomaticResumes();
+Diag_FaultIsRaisedOncePerEdge();]]></ST>
+    </Implementation>
+    <Method Name="Jog_Travel_MovesWhileHeldAndStopsOnRelease" Id="{e550a918-5ac9-7702-a788-031a1514ec24}">
+      <Declaration><![CDATA[METHOD PRIVATE Jog_Travel_MovesWhileHeldAndStopsOnRelease
+VAR
+    n : INT;
+    lrHeld : LREAL;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Jog_Travel_MovesWhileHeldAndStopsOnRelease');
+fbSrmJog.Init(fbRackJog);
+fbSrmJog.SetMode(E_OpMode.eManual);
+fbSrmJog.eJogAxis := E_JogAxis.eTravel;
+fbSrmJog.bJogFwd  := TRUE;
+FOR n := 1 TO 200 DO      // 2 s simulated
+    fbSrmJog.Cyclic();
+END_FOR
+lrHeld := fbSrmJog.TravelPos;
+AssertTrue(Condition := lrHeld > 0.5, Message := 'travel moves while the button is held');
+fbSrmJog.bJogFwd := FALSE;
+FOR n := 1 TO 200 DO
+    fbSrmJog.Cyclic();
+END_FOR
+AssertEquals_LREAL(Expected := lrHeld, Actual := fbSrmJog.TravelPos, Delta := 0.05, Message := 'travel stops on release');
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Jog_TravelWithForkOut_IsBlocked" Id="{8dcaf346-2a1b-3490-538d-bd8f24a546cb}">
+      <Declaration><![CDATA[METHOD PRIVATE Jog_TravelWithForkOut_IsBlocked
+VAR
+    n : INT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Jog_TravelWithForkOut_IsBlocked');
+fbSrmLock.Init(fbRackLock);
+fbSrmLock.SetMode(E_OpMode.eManual);
+fbSrmLock.eJogAxis := E_JogAxis.eFork;
+fbSrmLock.bJogFwd  := TRUE;
+FOR n := 1 TO 100 DO      // fork out by about 0.3 m
+    fbSrmLock.Cyclic();
+END_FOR
+fbSrmLock.bJogFwd := FALSE;
+fbSrmLock.Cyclic();
+AssertTrue(Condition := fbSrmLock.ForkActPos > 0.1, Message := 'fork is out');
+fbSrmLock.eJogAxis := E_JogAxis.eTravel;
+fbSrmLock.bJogFwd  := TRUE;
+FOR n := 1 TO 100 DO
+    fbSrmLock.Cyclic();
+END_FOR
+AssertTrue(Condition := fbSrmLock.bJogBlocked, Message := 'interlock reported');
+AssertEquals_LREAL(Expected := 0.0, Actual := fbSrmLock.TravelPos, Delta := 0.001, Message := 'travel must not move with the fork out');
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="TeachIn_AtNominal_IsStoredAndFarOff_IsRefused" Id="{49f7d106-9f7f-c4be-f3f9-89d55a31609f}">
+      <Declaration><![CDATA[METHOD PRIVATE TeachIn_AtNominal_IsStoredAndFarOff_IsRefused
+VAR
+    stPlace : ST_SlotAddr := (nSide := 1, nColumn := 2, nLevel := 2);
+    stFar   : ST_SlotAddr := (nSide := 1, nColumn := 3, nLevel := 2);
+    n : INT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('TeachIn_AtNominal_IsStoredAndFarOff_IsRefused');
+fbSrmTeach.Init(fbRackTeach);
+fbSrmTeach.SetMode(E_OpMode.eManual);
+fbTeach.Init(fbRackTeach, fbSrmTeach);
+AssertTrue(Condition := fbTeach.Start(stPlace), Message := 'teach start accepted');
+FOR n := 1 TO 3000 DO
+    fbSrmTeach.Cyclic();
+    IF NOT fbSrmTeach.bGotoActive THEN EXIT; END_IF
+END_FOR
+AssertEquals_LREAL(Expected := fbRackTeach.NominalX(stPlace), Actual := fbSrmTeach.TravelPos, Delta := 0.002, Message := 'RBG at the nominal place');
+AssertTrue(Condition := fbTeach.Confirm(), Message := 'position within tolerance is stored');
+AssertEquals_INT(Expected := 1, Actual := fbTeach.nTaught, Message := 'one place taught');
+// Next place: drive there, then the operator jogs the hoist about 0.1 m too high.
+fbTeach.Start(stFar);
+AssertFalse(Condition := fbTeach.Confirm(), Message := 'still driving: no confirm');
+FOR n := 1 TO 3000 DO
+    fbSrmTeach.Cyclic();
+    IF NOT fbSrmTeach.bGotoActive THEN EXIT; END_IF
+END_FOR
+fbSrmTeach.eJogAxis := E_JogAxis.eHoist;
+fbSrmTeach.bJogFwd  := TRUE;
+FOR n := 1 TO 50 DO
+    fbSrmTeach.Cyclic();
+END_FOR
+fbSrmTeach.bJogFwd := FALSE;
+fbSrmTeach.Cyclic();
+AssertFalse(Condition := fbTeach.Confirm(), Message := 'far from the drawing: refused');
+AssertTrue(Condition := fbTeach.bLastRejected, Message := 'rejection reported');
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Stop_DuringJob_HaltsAndAutomaticResumes" Id="{0251a67e-d0d7-c2ed-0e37-13199d21dcdc}">
+      <Declaration><![CDATA[METHOD PRIVATE Stop_DuringJob_HaltsAndAutomaticResumes
+VAR
+    stStation : ST_SlotAddr := (nSide := 1, nColumn := 0, nLevel := 1);
+    stPlace   : ST_SlotAddr := (nSide := 2, nColumn := 6, nLevel := 3);
+    n : DINT;
+    lrStopped : LREAL;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Stop_DuringJob_HaltsAndAutomaticResumes');
+fbSrmStop.Init(fbRackStop);
+fbSrmStop.SetMode(E_OpMode.eAutomatic);
+fbRackStop.Put(stStation, 'LE0007');
+fbSrmStop.StartJob(stStation, stPlace);
+FOR n := 1 TO 300 DO
+    fbSrmStop.Cyclic();
+END_FOR
+fbSrmStop.SetMode(E_OpMode.eStop);
+fbSrmStop.Cyclic();
+lrStopped := fbSrmStop.TravelPos;
+FOR n := 1 TO 300 DO
+    fbSrmStop.Cyclic();
+END_FOR
+AssertEquals_LREAL(Expected := lrStopped, Actual := fbSrmStop.TravelPos, Delta := 0.001, Message := 'no motion in stop');
+AssertTrue(Condition := fbSrmStop.bBusy, Message := 'job still pending');
+fbSrmStop.SetMode(E_OpMode.eAutomatic);
+FOR n := 1 TO 30000 DO
+    fbSrmStop.Cyclic();
+    IF fbSrmStop.bJobDone OR fbSrmStop.bFault THEN EXIT; END_IF
+END_FOR
+AssertEquals_STRING(Expected := 'LE0007', Actual := fbRackStop.LeIdAt(stPlace), Message := 'job finishes after automatic again');
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Diag_FaultIsRaisedOncePerEdge" Id="{2e7b491a-e1bd-1783-eae7-7ed8645c529c}">
+      <Declaration><![CDATA[METHOD PRIVATE Diag_FaultIsRaisedOncePerEdge
+VAR
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('Diag_FaultIsRaisedOncePerEdge');
+fbDiag.Check(E_Fault.eInfeedJam, TRUE, 'test jam');
+fbDiag.Check(E_Fault.eInfeedJam, TRUE, 'test jam');
+AssertEquals_UDINT(Expected := 1, Actual := fbDiag.nRaised, Message := 'raised once while active');
+AssertEquals_INT(Expected := 1, Actual := fbDiag.nActive, Message := 'one active');
+AssertEquals_STRING(Expected := 'test jam', Actual := fbDiag.aText[TO_INT(E_Fault.eInfeedJam)], Message := 'text for the HMI');
+fbDiag.Check(E_Fault.eInfeedJam, FALSE, 'test jam');
+AssertEquals_INT(Expected := 0, Actual := fbDiag.nActive, Message := 'cleared');
+AssertEquals_STRING(Expected := '', Actual := fbDiag.aText[TO_INT(E_Fault.eInfeedJam)], Message := 'text cleared');
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

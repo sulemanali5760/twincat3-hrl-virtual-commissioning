@@ -1,0 +1,15 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="E_AxisKind" Id="{900f93e1-5a83-f79e-f09e-4b409ea7f81b}">
+    <Declaration><![CDATA[// Which implementation drives the RBG axes. Switched in the configuration,
+// never in the code: the sequence only talks to I_Axis.
+{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE E_AxisKind :
+(
+    eSim := 0,   // FB_Axis: simulated trapezoid profile, simulated time (tests, demo)
+    eNc  := 1    // FB_AxisNc: Beckhoff NC axis via Tc2_MC2 (real drive or NC simulation axis)
+) INT;
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

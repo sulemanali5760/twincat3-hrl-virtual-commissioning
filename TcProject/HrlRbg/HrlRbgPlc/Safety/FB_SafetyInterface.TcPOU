@@ -1,0 +1,47 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_SafetyInterface" Id="{6591d468-e1d5-0354-8263-f3c10cbb740d}" SpecialFunc="None">
+    <Declaration><![CDATA[// FB_SafetyInterface - standard-PLC side of the safety concept. NOT a safety
+// function: the safety controller stops the machine on its own; this block
+// makes the standard program follow it and adds what the standard side owns:
+//   - drive enable and automatic only while every safety bit is OK
+//   - restart lock: after any drop, nothing restarts until bReset (rising edge)
+//     with all bits OK again (no automatic restart, cf. EN ISO 13849 / EN 528)
+//   - door unlock request only while the RBG stands still
+// Template only: the integrator validates the whole safety concept per machine.
+FUNCTION_BLOCK FB_SafetyInterface
+VAR_INPUT
+    stStatus      : ST_SafetyStatus;
+    bSimulate     : BOOL;   // bench without safety hardware: status counts as OK
+    bReset        : BOOL;   // operator acknowledge (rising edge)
+    bDoorRequest  : BOOL;   // operator wants to enter the aisle
+    bStandstill   : BOOL;   // RBG not moving
+END_VAR
+VAR_OUTPUT
+    bDriveEnable   : BOOL;  // standard enable of the axes / automatic allowed
+    bRestartLock   : BOOL;  // a safety bit dropped; waits for bReset
+    bDoorUnlockReq : BOOL;  // request to the safety controller to unlock the door
+END_VAR
+VAR
+    fbResetEdge : R_TRIG;
+    bAllOk      : BOOL;
+    bStarted    : BOOL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[bAllOk := bSimulate OR (stStatus.bSafetyRun AND stStatus.bEStopOk AND stStatus.bDoorClosed
+                        AND stStatus.bDoorLocked AND stStatus.bStoOk);
+fbResetEdge(CLK := bReset);
+IF NOT bStarted THEN            // power-up counts as a drop: acknowledge first
+    bRestartLock := NOT bSimulate;
+    bStarted     := TRUE;
+END_IF
+IF NOT bAllOk THEN
+    bRestartLock := TRUE;
+ELSIF fbResetEdge.Q THEN
+    bRestartLock := FALSE;
+END_IF
+bDriveEnable   := bAllOk AND NOT bRestartLock;
+bDoorUnlockReq := bDoorRequest AND bStandstill;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

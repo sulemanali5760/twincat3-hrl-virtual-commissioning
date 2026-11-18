@@ -1,0 +1,14 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="E_MfrLink" Id="{51bd9ef0-a111-b88e-c483-6405f97fa508}">
+    <Declaration><![CDATA[// Where the transport orders come from.
+{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE E_MfrLink :
+(
+    eEmulator := 0,   // FB_MfrEmulator in the PLC (commissioning, demo, tests)
+    eTcp      := 1    // real material flow computer over TCP/IP (PLC is the server)
+) INT;
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

@@ -1,0 +1,22 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_TelegramLayout" Id="{5dd13430-8aa5-659b-6a78-19af575a6136}">
+    <Declaration><![CDATA[// Field widths of the fixed-length ASCII telegram. The field order is fixed:
+//   type | seq | order | load unit | source side,column,level | target side,column,level | status
+// Numbers are right-aligned with leading zeros, the load unit id is
+// left-aligned and padded with spaces. The frame is STX + fields + ETX.
+// Defaults give a 52-character telegram.
+TYPE ST_TelegramLayout :
+STRUCT
+    nType   : INT := 4;
+    nSeq    : INT := 5;
+    nOrder  : INT := 8;
+    nLeId   : INT := 20;
+    nSide   : INT := 1;
+    nColumn : INT := 3;
+    nLevel  : INT := 2;
+    nStatus : INT := 3;
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

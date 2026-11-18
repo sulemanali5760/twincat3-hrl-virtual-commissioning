@@ -1,0 +1,192 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_TelegramCodec" Id="{91cdd6a1-cdd6-05a8-083d-a60631f0bcd2}" SpecialFunc="None">
+    <Declaration><![CDATA[// FB_TelegramCodec - ST_Telegram <-> fixed-length ASCII text (without STX/ETX).
+// The field widths come from stLayout (configuration), the order is fixed (see
+// ST_TelegramLayout). Decode refuses a frame of the wrong length or with a
+// non-digit in a number field, so a garbled telegram can never move a pallet.
+FUNCTION_BLOCK FB_TelegramCodec
+VAR_INPUT
+    stLayout : ST_TelegramLayout;
+END_VAR
+VAR
+    nPos : INT;   // read position while decoding (1-based, as MID)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name="FrameLength" Id="{8ddb37bc-6eaa-060d-4a95-a776d67697c7}">
+      <Declaration><![CDATA[METHOD PUBLIC FrameLength : INT
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[FrameLength := stLayout.nType + stLayout.nSeq + stLayout.nOrder + stLayout.nLeId
+             + 2 * (stLayout.nSide + stLayout.nColumn + stLayout.nLevel) + stLayout.nStatus;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Encode" Id="{d8f2f094-e96b-0980-57a3-13ea8e0c9a19}">
+      <Declaration><![CDATA[METHOD PUBLIC Encode : STRING(255)
+VAR_INPUT
+    stTel : ST_Telegram;
+END_VAR
+VAR
+    sAll : STRING(255);   // telegram so far (reading Encode itself would be a recursive call)
+    sTmp : STRING(255);   // one field; CONCAT must not take a string function call directly (error 3202)
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[sAll := Text(stTel.sType, stLayout.nType);
+sTmp := Digits(UINT_TO_DINT(stTel.nSeq), stLayout.nSeq);                sAll := CONCAT(sAll, sTmp);
+sTmp := Digits(stTel.nOrder, stLayout.nOrder);                          sAll := CONCAT(sAll, sTmp);
+sTmp := Text(stTel.sLeId, stLayout.nLeId);                              sAll := CONCAT(sAll, sTmp);
+sTmp := Digits(INT_TO_DINT(stTel.stSource.nSide), stLayout.nSide);      sAll := CONCAT(sAll, sTmp);
+sTmp := Digits(INT_TO_DINT(stTel.stSource.nColumn), stLayout.nColumn);  sAll := CONCAT(sAll, sTmp);
+sTmp := Digits(INT_TO_DINT(stTel.stSource.nLevel), stLayout.nLevel);    sAll := CONCAT(sAll, sTmp);
+sTmp := Digits(INT_TO_DINT(stTel.stTarget.nSide), stLayout.nSide);      sAll := CONCAT(sAll, sTmp);
+sTmp := Digits(INT_TO_DINT(stTel.stTarget.nColumn), stLayout.nColumn);  sAll := CONCAT(sAll, sTmp);
+sTmp := Digits(INT_TO_DINT(stTel.stTarget.nLevel), stLayout.nLevel);    sAll := CONCAT(sAll, sTmp);
+sTmp := Digits(INT_TO_DINT(stTel.nStatus), stLayout.nStatus);           sAll := CONCAT(sAll, sTmp);
+Encode := sAll;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Decode" Id="{f9e18fbe-22df-5274-9a68-8fc11d22e787}">
+      <Declaration><![CDATA[// TRUE and stTel filled if sFrame is a well-formed telegram; FALSE otherwise.
+METHOD PUBLIC Decode : BOOL
+VAR_INPUT
+    sFrame : STRING(255);
+END_VAR
+VAR_IN_OUT
+    stTel : ST_Telegram;
+END_VAR
+VAR
+    stNew : ST_Telegram;
+    bOk   : BOOL := TRUE;
+    sPart : STRING(255);
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF LEN(sFrame) <> FrameLength() THEN
+    RETURN;
+END_IF
+nPos := 1;
+sPart                  := Field(sFrame, stLayout.nType);
+stNew.sType            := Trimmed(sPart);
+sPart := Field(sFrame, stLayout.nSeq);
+stNew.nSeq             := DINT_TO_UINT(Number(sPart, bOk));
+sPart := Field(sFrame, stLayout.nOrder);
+stNew.nOrder           := Number(sPart, bOk);
+sPart                  := Field(sFrame, stLayout.nLeId);
+stNew.sLeId            := Trimmed(sPart);
+sPart := Field(sFrame, stLayout.nSide);
+stNew.stSource.nSide   := DINT_TO_INT(Number(sPart, bOk));
+sPart := Field(sFrame, stLayout.nColumn);
+stNew.stSource.nColumn := DINT_TO_INT(Number(sPart, bOk));
+sPart := Field(sFrame, stLayout.nLevel);
+stNew.stSource.nLevel  := DINT_TO_INT(Number(sPart, bOk));
+sPart := Field(sFrame, stLayout.nSide);
+stNew.stTarget.nSide   := DINT_TO_INT(Number(sPart, bOk));
+sPart := Field(sFrame, stLayout.nColumn);
+stNew.stTarget.nColumn := DINT_TO_INT(Number(sPart, bOk));
+sPart := Field(sFrame, stLayout.nLevel);
+stNew.stTarget.nLevel  := DINT_TO_INT(Number(sPart, bOk));
+sPart := Field(sFrame, stLayout.nStatus);
+stNew.nStatus          := DINT_TO_INT(Number(sPart, bOk));
+IF bOk THEN
+    stTel  := stNew;
+    Decode := TRUE;
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Field" Id="{cd8fdb93-40c6-e2f8-12bc-91da292edaf9}">
+      <Declaration><![CDATA[// Next nWidth characters from nPos on; advances nPos.
+METHOD PRIVATE Field : STRING(255)
+VAR_INPUT
+    sFrame : STRING(255);
+    nWidth : INT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[Field := MID(sFrame, nWidth, nPos);
+nPos  := nPos + nWidth;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Number" Id="{94fd3880-caa5-d518-c4b8-714025fa023b}">
+      <Declaration><![CDATA[// Digits-only field to DINT. A non-digit clears bOk.
+METHOD PRIVATE Number : DINT
+VAR_INPUT
+    sField : STRING(255);
+END_VAR
+VAR_IN_OUT
+    bOk : BOOL;
+END_VAR
+VAR
+    i : INT;
+    pC : POINTER TO BYTE;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF LEN(sField) = 0 THEN
+    bOk := FALSE;
+    RETURN;
+END_IF
+pC := ADR(sField);
+FOR i := 0 TO LEN(sField) - 1 DO
+    IF pC[i] < 16#30 OR pC[i] > 16#39 THEN   // '0'..'9'
+        bOk := FALSE;
+        RETURN;
+    END_IF
+END_FOR
+Number := STRING_TO_DINT(sField);]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Digits" Id="{d509b0df-fc70-22e8-2da8-4d60f298df41}">
+      <Declaration><![CDATA[// n right-aligned with leading zeros in nWidth characters (keeps the last nWidth digits).
+METHOD PRIVATE Digits : STRING(255)
+VAR_INPUT
+    n      : DINT;
+    nWidth : INT;
+END_VAR
+VAR
+    sTmp : STRING(255);
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[sTmp := DINT_TO_STRING(ABS(n));
+WHILE LEN(sTmp) < nWidth DO
+    sTmp := CONCAT('0', sTmp);
+END_WHILE
+Digits := RIGHT(sTmp, nWidth);]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Text" Id="{1134d6da-f4fe-f481-6d0d-e229647ed16e}">
+      <Declaration><![CDATA[// s left-aligned, padded with spaces / cut to nWidth characters.
+METHOD PRIVATE Text : STRING(255)
+VAR_INPUT
+    sTmp      : STRING(255);
+    nWidth : INT;
+END_VAR
+VAR
+    sOut : STRING(255);
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[sOut := LEFT(sTmp, nWidth);
+WHILE LEN(sOut) < nWidth DO
+    sOut := CONCAT(sOut, ' ');
+END_WHILE
+Text := sOut;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Trimmed" Id="{ccd17a11-dcf8-732d-5709-78e4b600d02e}">
+      <Declaration><![CDATA[// s without trailing spaces.
+METHOD PRIVATE Trimmed : STRING(255)
+VAR_INPUT
+    sTmp : STRING(255);
+END_VAR
+VAR
+    sOut : STRING(255);
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[sOut := sTmp;
+WHILE LEN(sOut) > 0 AND_THEN RIGHT(sOut, 1) = ' ' DO
+    sOut := LEFT(sOut, LEN(sOut) - 1);
+END_WHILE
+Trimmed := sOut;]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

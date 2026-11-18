@@ -1,0 +1,166 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_AxisNc" Id="{6de70f5e-b7e0-1236-a4e4-8de30a25c06c}" SpecialFunc="None">
+    <Declaration><![CDATA[// FB_AxisNc - one RBG axis on a Beckhoff NC axis (Tc2_MC2), with the same
+// MoveAbs/Reset contract as the simulated FB_Axis. Link stAxis to an NC axis
+// in the System Manager; with no drive linked the NC axis simulates itself, so
+// the same code runs on the bench and on the machine.
+//
+// The PLC works in metres, the NC axis in its own unit (default mm):
+// lrScale converts (1000 = NC unit mm).
+FUNCTION_BLOCK FB_AxisNc EXTENDS FB_CyclicNode IMPLEMENTS I_Axis
+VAR_INPUT
+    bEnable     : BOOL;              // FALSE: block does nothing (axis not used)
+    lrVelocity  : LREAL := 1.0;      // [m/s]
+    lrAccel     : LREAL := 0.5;      // acceleration = deceleration [m/s2]
+    lrTolerance : LREAL := 0.002;    // in-position window [m]
+    lrScale     : LREAL := 1000.0;   // NC units per metre
+END_VAR
+VAR_OUTPUT
+    lrActPos    : LREAL;             // actual position [m]
+    lrActVelo   : LREAL;             // actual velocity [m/s]
+    bInPosition : BOOL;
+    bError      : BOOL;
+    nErrorId    : UDINT;             // NC error code (Beckhoff NC error list)
+END_VAR
+VAR
+    stAxis     : AXIS_REF;           // link to the NC axis
+    fbPower    : MC_Power;
+    fbReset    : MC_Reset;
+    fbMove     : MC_MoveAbsolute;
+    fbHalt     : MC_Halt;
+    bHaltReq   : BOOL;
+    lrTarget   : LREAL;
+    bHasTarget : BOOL;
+    nMoveStep  : INT;                // 0 idle, 1 new target (Execute low), 2 moving
+    bResetReq  : BOOL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name="MoveAbs" Id="{e4f0c6c9-8327-a48f-7e31-25a93ed5f9f2}">
+      <Declaration><![CDATA[METHOD PUBLIC MoveAbs : E_CmdResult
+VAR_INPUT
+    lrPos : LREAL;   // target [m]
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF NOT bHasTarget OR ABS(lrPos - lrTarget) > 1.0E-9 THEN   // a new target is a new move
+    lrTarget    := lrPos;
+    bHasTarget  := TRUE;
+    nMoveStep   := 1;
+    bInPosition := FALSE;
+END_IF
+IF bError THEN
+    MoveAbs := E_CmdResult.eError;
+ELSIF bInPosition THEN
+    MoveAbs := E_CmdResult.eDone;
+ELSE
+    MoveAbs := E_CmdResult.eBusy;
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Reset" Id="{7a4c6310-6332-816e-4740-7891b322dafe}">
+      <Declaration><![CDATA[METHOD PUBLIC Reset
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[bError     := FALSE;
+nErrorId   := 0;
+bResetReq  := TRUE;
+bHasTarget := FALSE;
+nMoveStep  := 0;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Halt" Id="{ea25a959-e59b-c8e1-cbd4-95a4302df23f}">
+      <Declaration><![CDATA[// Stop with the configured deceleration (MC_Halt); then wait for a new target.
+METHOD PUBLIC Halt
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF nMoveStep <> 0 OR NOT bInPosition THEN
+    bHaltReq := TRUE;
+END_IF
+nMoveStep   := 0;
+bHasTarget  := FALSE;
+bInPosition := TRUE;
+fbMove(Axis := stAxis, Execute := FALSE);]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="OnCyclic" Id="{9b5074e2-eb7e-b690-e09e-f6c758258197}">
+      <Declaration><![CDATA[METHOD PROTECTED OnCyclic
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF NOT bEnable THEN
+    RETURN;
+END_IF
+stAxis.ReadStatus();
+lrActPos  := stAxis.NcToPlc.ActPos / lrScale;
+lrActVelo := stAxis.NcToPlc.ActVelo / lrScale;
+
+fbReset(Axis := stAxis, Execute := bResetReq);
+IF fbReset.Done OR fbReset.Error THEN
+    bResetReq := FALSE;
+    fbReset(Axis := stAxis, Execute := FALSE);
+END_IF
+fbPower(Axis := stAxis, Enable := NOT bResetReq, Enable_Positive := TRUE,
+        Enable_Negative := TRUE, Override := 100.0);
+
+fbHalt(Axis := stAxis, Execute := bHaltReq, Deceleration := lrAccel * lrScale, Jerk := 0.0);
+IF bHaltReq AND (fbHalt.Done OR fbHalt.Error) THEN
+    bHaltReq := FALSE;
+    fbHalt(Axis := stAxis, Execute := FALSE);
+END_IF
+
+// Execute needs a rising edge per target: one cycle low, then high until done.
+CASE nMoveStep OF
+    1:  fbMove(Axis := stAxis, Execute := FALSE);
+        IF fbPower.Status AND NOT bResetReq THEN
+            nMoveStep := 2;
+        END_IF
+    2:  fbMove(Axis := stAxis, Execute := TRUE, Position := lrTarget * lrScale,
+               Velocity := lrVelocity * lrScale, Acceleration := lrAccel * lrScale,
+               Deceleration := lrAccel * lrScale, Jerk := 0.0);
+        IF fbMove.Done THEN
+            nMoveStep   := 0;
+            bInPosition := TRUE;   // the NC's own position window decides "done"
+            fbMove(Axis := stAxis, Execute := FALSE);
+        END_IF
+END_CASE
+
+IF fbMove.Error OR fbPower.Error OR stAxis.Status.Error THEN
+    bError    := TRUE;
+    nMoveStep := 0;
+    IF stAxis.Status.Error THEN
+        nErrorId := stAxis.Status.ErrorID;
+    ELSIF fbMove.Error THEN
+        nErrorId := fbMove.ErrorID;
+    ELSE
+        nErrorId := fbPower.ErrorID;
+    END_IF
+    fbMove(Axis := stAxis, Execute := FALSE);
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Property Name="ActPos" Id="{bb7765bf-dcde-09da-cecd-075628b24aa0}">
+      <Declaration><![CDATA[PROPERTY PUBLIC ActPos : LREAL]]></Declaration>
+      <Get Name="Get" Id="{3347eb8a-9130-6f1c-3268-3826e8352b28}">
+        <Declaration><![CDATA[VAR
+END_VAR]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[ActPos := lrActPos;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Property Name="Error" Id="{093fb792-76d4-9bd0-3418-40e656cbfee0}">
+      <Declaration><![CDATA[PROPERTY PUBLIC Error : BOOL]]></Declaration>
+      <Get Name="Get" Id="{ec3a1e60-525d-2b74-2539-37a3a045c506}">
+        <Declaration><![CDATA[VAR
+END_VAR]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[Error := bError;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+  </POU>
+</TcPlcObject>

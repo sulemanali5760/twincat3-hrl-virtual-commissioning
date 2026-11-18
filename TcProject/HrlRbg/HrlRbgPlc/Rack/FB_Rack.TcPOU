@@ -6,8 +6,11 @@
 // value measured during teach-in). It is data, not a machine node, so the RBG,
 // the MFR interface and the tests all share one instance by reference.
 FUNCTION_BLOCK FB_Rack
+VAR_INPUT
+    stCfg : ST_RackConfig;   // geometry; set once before the first job (FB_Hrl does it from the config)
+END_VAR
 VAR
-    aSlot     : ARRAY[1..GVL_Rack.cSides, 1..GVL_Rack.cColumns, 1..GVL_Rack.cLevels] OF ST_Slot;
+    aSlot     : ARRAY[1..GVL_Rack.cMaxSides, 1..GVL_Rack.cMaxColumns, 1..GVL_Rack.cMaxLevels] OF ST_Slot;
     stStation : ST_Slot;   // the transfer station in front of the aisle
 END_VAR]]></Declaration>
     <Implementation>
@@ -29,9 +32,9 @@ VAR_INPUT
 END_VAR]]></Declaration>
       <Implementation>
         <ST><![CDATA[IsValid := IsStation(stAddr)
-        OR (stAddr.nSide >= 1 AND stAddr.nSide <= GVL_Rack.cSides
-            AND stAddr.nColumn >= 1 AND stAddr.nColumn <= GVL_Rack.cColumns
-            AND stAddr.nLevel >= 1 AND stAddr.nLevel <= GVL_Rack.cLevels);]]></ST>
+        OR (stAddr.nSide >= 1 AND stAddr.nSide <= stCfg.nSides
+            AND stAddr.nColumn >= 1 AND stAddr.nColumn <= stCfg.nColumns
+            AND stAddr.nLevel >= 1 AND stAddr.nLevel <= stCfg.nLevels);]]></ST>
       </Implementation>
     </Method>
     <Method Name="Slot" Id="{ef3c02ec-3d0e-4e36-92f0-78d1ae2cd3dd}">
@@ -60,7 +63,7 @@ END_VAR]]></Declaration>
         <ST><![CDATA[IF IsStation(stAddr) THEN
     NominalX := 0.0;
 ELSE
-    NominalX := GVL_Rack.cOffsetX + INT_TO_LREAL(stAddr.nColumn - 1) * GVL_Rack.cPitchX;
+    NominalX := stCfg.lrOffsetX + INT_TO_LREAL(stAddr.nColumn - 1) * stCfg.lrPitchX;
 END_IF]]></ST>
       </Implementation>
     </Method>
@@ -71,7 +74,7 @@ VAR_INPUT
     stAddr : ST_SlotAddr;
 END_VAR]]></Declaration>
       <Implementation>
-        <ST><![CDATA[NominalY := GVL_Rack.cOffsetY + INT_TO_LREAL(stAddr.nLevel - 1) * GVL_Rack.cPitchY;]]></ST>
+        <ST><![CDATA[NominalY := stCfg.lrOffsetY + INT_TO_LREAL(stAddr.nLevel - 1) * stCfg.lrPitchY;]]></ST>
       </Implementation>
     </Method>
     <Method Name="TargetX" Id="{3fab5652-85d7-4ab9-a2be-24225cf1e157}">
@@ -125,8 +128,8 @@ END_VAR]]></Declaration>
       <Implementation>
         <ST><![CDATA[pSlot := Slot(stAddr);
 IF pSlot = 0 OR IsStation(stAddr)
-   OR ABS(lrX - NominalX(stAddr)) > GVL_Rack.cTeachTolerance
-   OR ABS(lrY - NominalY(stAddr)) > GVL_Rack.cTeachTolerance THEN
+   OR ABS(lrX - NominalX(stAddr)) > stCfg.lrTeachTolerance
+   OR ABS(lrY - NominalY(stAddr)) > stCfg.lrTeachTolerance THEN
     Teach := FALSE;
     RETURN;
 END_IF
@@ -218,9 +221,9 @@ VAR
     nCol, nLvl, nSide : INT;
 END_VAR]]></Declaration>
       <Implementation>
-        <ST><![CDATA[FOR nCol := 1 TO GVL_Rack.cColumns DO
-    FOR nLvl := 1 TO GVL_Rack.cLevels DO
-        FOR nSide := 1 TO GVL_Rack.cSides DO
+        <ST><![CDATA[FOR nCol := 1 TO stCfg.nColumns DO
+    FOR nLvl := 1 TO stCfg.nLevels DO
+        FOR nSide := 1 TO stCfg.nSides DO
             IF NOT aSlot[nSide, nCol, nLvl].bOccupied THEN
                 stFound.nSide   := nSide;
                 stFound.nColumn := nCol;

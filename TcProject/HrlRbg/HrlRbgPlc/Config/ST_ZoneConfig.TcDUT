@@ -1,0 +1,14 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_ZoneConfig" Id="{b717e1bb-e68f-91c0-071c-688b289aa6e6}">
+    <Declaration><![CDATA[// Parameters of one conveyor zone (the standard block FB_ConveyorZone).
+TYPE ST_ZoneConfig :
+STRUCT
+    lrLength     : LREAL := 1.6;    // up to the end light barrier [m]
+    lrSpeed      : LREAL := 0.2;    // [m/s]
+    lrJamTimeout : LREAL := 20.0;   // [s]
+    bSimulate    : BOOL  := TRUE;   // FALSE: end light barrier from the real input
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

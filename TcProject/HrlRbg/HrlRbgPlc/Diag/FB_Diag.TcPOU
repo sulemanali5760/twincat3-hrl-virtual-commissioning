@@ -1,0 +1,55 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_Diag" Id="{46bfd9d8-fa60-5aac-1682-8e9efda16d03}">
+    <Declaration><![CDATA[// FB_Diag - plant fault list. Call Check() for every fault condition each
+// cycle. A fault that becomes active is written once to the TwinCAT logger
+// (ADSLOGSTR, visible in the XAE Error List and the logger) with its cause and
+// remedy, and stays in aText until the condition clears. The HMI shows aText.
+// (Event classes of the TwinCAT EventLogger need the XAE type editor; this
+// block uses the logger directly so it builds and runs headless.)
+FUNCTION_BLOCK FB_Diag
+VAR CONSTANT
+    cMaxFault : INT := 16;
+END_VAR
+VAR_OUTPUT
+    nActive : INT;                                // faults active now
+    nRaised : UDINT;                              // faults raised since start
+    aText   : ARRAY[1..cMaxFault] OF STRING(80);  // '' = not active
+END_VAR
+VAR
+    aActive : ARRAY[1..cMaxFault] OF BOOL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name="Check" Id="{0cc2926a-5535-f215-4005-3fd2c05ded60}">
+      <Declaration><![CDATA[METHOD PUBLIC Check
+VAR_INPUT
+    eFault     : E_Fault;
+    bCondition : BOOL;
+    sText      : STRING(80);   // cause - remedy
+END_VAR
+VAR
+    nIdx : INT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[nIdx := TO_INT(eFault);
+IF nIdx < 1 OR nIdx > cMaxFault THEN
+    RETURN;
+END_IF
+IF bCondition AND NOT aActive[nIdx] THEN
+    aActive[nIdx] := TRUE;
+    aText[nIdx]   := sText;
+    nActive := nActive + 1;
+    nRaised := nRaised + 1;
+    ADSLOGSTR(msgCtrlMask := ADSLOG_MSGTYPE_ERROR OR ADSLOG_MSGTYPE_LOG,
+              msgFmtStr := 'HRL fault: %s', strArg := sText);
+ELSIF NOT bCondition AND aActive[nIdx] THEN
+    aActive[nIdx] := FALSE;
+    aText[nIdx]   := '';
+    nActive := nActive - 1;
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

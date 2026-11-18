@@ -1,0 +1,295 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_HrlConfig" Id="{77e2a905-6814-7c03-db53-48ddd2eb3921}" SpecialFunc="None">
+    <Declaration><![CDATA[// FB_HrlConfig - loads the plant configuration once at start-up.
+// Call it every cycle until bDone. It reads sFileName from the TwinCAT boot
+// folder, parses the JSON and checks every value. A missing file is not an
+// error: the plant runs with the built-in defaults (bFileFound = FALSE).
+// A file that does not parse or holds a value out of range sets bError and
+// sError and also leaves the defaults in place - a bad config never half-applies.
+FUNCTION_BLOCK FB_HrlConfig
+VAR_INPUT
+    sFileName : STRING := 'HrlConfig.json';   // in the boot folder (PATH_BOOTPATH)
+END_VAR
+VAR_OUTPUT
+    bDone      : BOOL;
+    bFileFound : BOOL;
+    bError     : BOOL;
+    sError     : STRING(120);
+    stConfig   : ST_HrlConfig;
+END_VAR
+VAR
+    fbOpen  : FB_FileOpen;
+    fbRead  : FB_FileRead;
+    fbClose : FB_FileClose;
+    fbJson  : FB_JsonDomParser;
+    hFile   : UINT;
+    nStep   : INT;
+    bReadOk : BOOL;
+    nLen    : UDINT;
+    sText   : STRING(8191);
+    pEnd    : POINTER TO BYTE;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[CASE nStep OF
+    0:  fbOpen(sNetId := '', sPathName := sFileName, nMode := FOPEN_MODEREAD OR FOPEN_MODETEXT,
+               ePath := PATH_BOOTPATH, bExecute := TRUE);
+        nStep := 1;
+    1:  fbOpen(bExecute := TRUE);
+        IF NOT fbOpen.bBusy THEN
+            fbOpen(bExecute := FALSE);
+            IF fbOpen.bError THEN       // no file: keep the defaults
+                bFileFound := FALSE;
+                bDone      := TRUE;
+                nStep      := 10;
+            ELSE
+                hFile := fbOpen.hFile;
+                nStep := 2;
+            END_IF
+        END_IF
+    2:  fbRead(sNetId := '', hFile := hFile, pReadBuff := ADR(sText),
+               cbReadLen := SIZEOF(sText) - 1, bExecute := TRUE);
+        nStep := 3;
+    3:  fbRead(bExecute := TRUE);
+        IF NOT fbRead.bBusy THEN
+            fbRead(bExecute := FALSE);
+            bReadOk := NOT fbRead.bError;
+            nLen    := fbRead.cbRead;
+            nStep   := 4;
+        END_IF
+    4:  fbClose(sNetId := '', hFile := hFile, bExecute := TRUE);
+        nStep := 5;
+    5:  fbClose(bExecute := TRUE);
+        IF NOT fbClose.bBusy THEN
+            fbClose(bExecute := FALSE);
+            bFileFound := TRUE;
+            IF bReadOk THEN
+                pEnd  := ADR(sText) + nLen;   // terminate the string after the bytes read
+                pEnd^ := 0;
+                Parse(sText);
+            ELSE
+                bError := TRUE;
+                sError := CONCAT('cannot read ', sFileName);
+            END_IF
+            bDone := TRUE;
+            nStep := 10;
+        END_IF
+END_CASE]]></ST>
+    </Implementation>
+    <Method Name="Parse" Id="{540f7932-5518-989b-f971-54f87aa30600}">
+      <Declaration><![CDATA[// Parse a JSON text into stConfig. Missing entries keep their default.
+// FALSE (and stConfig unchanged) if the text is not JSON or a value is out of range.
+METHOD PUBLIC Parse : BOOL
+VAR_IN_OUT CONSTANT
+    sJson : STRING;
+END_VAR
+VAR
+    stNew  : ST_HrlConfig;   // starts as the defaults
+    jDoc, jRack, jAxes, jConv, jMfr, jKind, jLayout, jSafety : SJsonValue;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[bError := FALSE;
+sError := '';
+jDoc := fbJson.ParseDocument(sJson);
+IF jDoc = 0 THEN
+    bError := TRUE;
+    sError := 'config is not valid JSON';
+    RETURN;
+END_IF
+jRack := fbJson.FindMember(jDoc, 'rack');
+IF jRack <> 0 THEN
+    stNew.stRack.nSides           := LREAL_TO_INT(ReadNum(jRack, 'sides', INT_TO_LREAL(stNew.stRack.nSides)));
+    stNew.stRack.nColumns         := LREAL_TO_INT(ReadNum(jRack, 'columns', INT_TO_LREAL(stNew.stRack.nColumns)));
+    stNew.stRack.nLevels          := LREAL_TO_INT(ReadNum(jRack, 'levels', INT_TO_LREAL(stNew.stRack.nLevels)));
+    stNew.stRack.lrPitchX         := ReadNum(jRack, 'pitchX', stNew.stRack.lrPitchX);
+    stNew.stRack.lrPitchY         := ReadNum(jRack, 'pitchY', stNew.stRack.lrPitchY);
+    stNew.stRack.lrOffsetX        := ReadNum(jRack, 'offsetX', stNew.stRack.lrOffsetX);
+    stNew.stRack.lrOffsetY        := ReadNum(jRack, 'offsetY', stNew.stRack.lrOffsetY);
+    stNew.stRack.lrForkStroke     := ReadNum(jRack, 'forkStroke', stNew.stRack.lrForkStroke);
+    stNew.stRack.lrLiftStroke     := ReadNum(jRack, 'liftStroke', stNew.stRack.lrLiftStroke);
+    stNew.stRack.lrTeachTolerance := ReadNum(jRack, 'teachTolerance', stNew.stRack.lrTeachTolerance);
+END_IF
+jAxes := fbJson.FindMember(jDoc, 'axes');
+IF jAxes <> 0 THEN
+    jKind := fbJson.FindMember(jAxes, 'kind');
+    IF jKind <> 0 THEN
+        IF fbJson.GetString(jKind) = 'nc' THEN
+            stNew.eAxisKind := E_AxisKind.eNc;
+        ELSIF fbJson.GetString(jKind) = 'sim' THEN
+            stNew.eAxisKind := E_AxisKind.eSim;
+        ELSE
+            bError := TRUE;
+            sError := 'axes.kind must be sim or nc';
+            RETURN;
+        END_IF
+    END_IF
+    stNew.stTravel := ReadAxis(jAxes, 'travel', stNew.stTravel);
+    stNew.stHoist  := ReadAxis(jAxes, 'hoist', stNew.stHoist);
+    stNew.stFork   := ReadAxis(jAxes, 'fork', stNew.stFork);
+END_IF
+jConv := fbJson.FindMember(jDoc, 'conveyors');
+IF jConv <> 0 THEN
+    stNew.stInfeed  := ReadZone(jConv, 'infeed', stNew.stInfeed);
+    stNew.stOutfeed := ReadZone(jConv, 'outfeed', stNew.stOutfeed);
+END_IF
+jMfr := fbJson.FindMember(jDoc, 'mfr');
+IF jMfr <> 0 THEN
+    stNew.lrAckTimeout := ReadNum(jMfr, 'ackTimeout', stNew.lrAckTimeout);
+    stNew.nMfrPort     := LREAL_TO_UINT(ReadNum(jMfr, 'port', UINT_TO_LREAL(stNew.nMfrPort)));
+    jKind := fbJson.FindMember(jMfr, 'link');
+    IF jKind <> 0 THEN
+        IF fbJson.GetString(jKind) = 'tcp' THEN
+            stNew.eMfrLink := E_MfrLink.eTcp;
+        ELSIF fbJson.GetString(jKind) = 'emulator' THEN
+            stNew.eMfrLink := E_MfrLink.eEmulator;
+        ELSE
+            bError := TRUE;
+            sError := 'mfr.link must be emulator or tcp';
+            RETURN;
+        END_IF
+    END_IF
+    jLayout := fbJson.FindMember(jMfr, 'layout');
+    IF jLayout <> 0 THEN
+        stNew.stLayout.nType   := LREAL_TO_INT(ReadNum(jLayout, 'type', INT_TO_LREAL(stNew.stLayout.nType)));
+        stNew.stLayout.nSeq    := LREAL_TO_INT(ReadNum(jLayout, 'seq', INT_TO_LREAL(stNew.stLayout.nSeq)));
+        stNew.stLayout.nOrder  := LREAL_TO_INT(ReadNum(jLayout, 'order', INT_TO_LREAL(stNew.stLayout.nOrder)));
+        stNew.stLayout.nLeId   := LREAL_TO_INT(ReadNum(jLayout, 'leId', INT_TO_LREAL(stNew.stLayout.nLeId)));
+        stNew.stLayout.nSide   := LREAL_TO_INT(ReadNum(jLayout, 'side', INT_TO_LREAL(stNew.stLayout.nSide)));
+        stNew.stLayout.nColumn := LREAL_TO_INT(ReadNum(jLayout, 'column', INT_TO_LREAL(stNew.stLayout.nColumn)));
+        stNew.stLayout.nLevel  := LREAL_TO_INT(ReadNum(jLayout, 'level', INT_TO_LREAL(stNew.stLayout.nLevel)));
+        stNew.stLayout.nStatus := LREAL_TO_INT(ReadNum(jLayout, 'status', INT_TO_LREAL(stNew.stLayout.nStatus)));
+    END_IF
+END_IF
+jSafety := fbJson.FindMember(jDoc, 'safety');
+IF jSafety <> 0 THEN
+    jKind := fbJson.FindMember(jSafety, 'simulate');
+    IF jKind <> 0 THEN
+        stNew.bSafetySimulate := fbJson.GetBool(jKind);
+    END_IF
+END_IF
+IF NOT Validate(stNew) THEN
+    bError := TRUE;
+    RETURN;
+END_IF
+stConfig := stNew;
+Parse := TRUE;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ReadNum" Id="{45aab125-b990-14c9-9856-44e84ec532fb}">
+      <Declaration><![CDATA[METHOD PRIVATE ReadNum : LREAL
+VAR_INPUT
+    jParent   : SJsonValue;
+    sName     : STRING;
+    lrDefault : LREAL;
+END_VAR
+VAR
+    j : SJsonValue;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[j := fbJson.FindMember(jParent, sName);
+IF j = 0 THEN
+    ReadNum := lrDefault;
+ELSE
+    ReadNum := fbJson.GetDouble(j);
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ReadAxis" Id="{82135c1d-c07a-18bd-dae9-5c14598cef37}">
+      <Declaration><![CDATA[METHOD PRIVATE ReadAxis : ST_AxisConfig
+VAR_INPUT
+    jParent   : SJsonValue;
+    sName     : STRING;
+    stDefault : ST_AxisConfig;
+END_VAR
+VAR
+    j : SJsonValue;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[ReadAxis := stDefault;
+j := fbJson.FindMember(jParent, sName);
+IF j <> 0 THEN
+    ReadAxis.lrVelocity := ReadNum(j, 'velocity', stDefault.lrVelocity);
+    ReadAxis.lrAccel    := ReadNum(j, 'accel', stDefault.lrAccel);
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="ReadZone" Id="{8e5b0a72-fef2-afe3-da9b-27e21afad336}">
+      <Declaration><![CDATA[METHOD PRIVATE ReadZone : ST_ZoneConfig
+VAR_INPUT
+    jParent   : SJsonValue;
+    sName     : STRING;
+    stDefault : ST_ZoneConfig;
+END_VAR
+VAR
+    j, jSim : SJsonValue;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[ReadZone := stDefault;
+j := fbJson.FindMember(jParent, sName);
+IF j <> 0 THEN
+    ReadZone.lrLength     := ReadNum(j, 'length', stDefault.lrLength);
+    ReadZone.lrSpeed      := ReadNum(j, 'speed', stDefault.lrSpeed);
+    ReadZone.lrJamTimeout := ReadNum(j, 'jamTimeout', stDefault.lrJamTimeout);
+    jSim := fbJson.FindMember(j, 'simulate');
+    IF jSim <> 0 THEN
+        ReadZone.bSimulate := fbJson.GetBool(jSim);
+    END_IF
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Validate" Id="{7eca5751-17bb-ad0a-296f-616742ab645e}">
+      <Declaration><![CDATA[// Range check of a whole configuration; names the first bad value in sError.
+METHOD PRIVATE Validate : BOOL
+VAR_INPUT
+    stChk : ST_HrlConfig;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[Validate := FALSE;
+IF stChk.stRack.nSides < 1 OR stChk.stRack.nSides > GVL_Rack.cMaxSides THEN
+    sError := 'rack.sides out of range';
+ELSIF stChk.stRack.nColumns < 1 OR stChk.stRack.nColumns > GVL_Rack.cMaxColumns THEN
+    sError := 'rack.columns out of range';
+ELSIF stChk.stRack.nLevels < 1 OR stChk.stRack.nLevels > GVL_Rack.cMaxLevels THEN
+    sError := 'rack.levels out of range';
+ELSIF stChk.stRack.lrPitchX <= 0.0 OR stChk.stRack.lrPitchY <= 0.0 OR stChk.stRack.lrForkStroke <= 0.0
+   OR stChk.stRack.lrLiftStroke <= 0.0 OR stChk.stRack.lrTeachTolerance <= 0.0 THEN
+    sError := 'rack dimensions must be > 0';
+ELSIF NOT AxisOk(stChk.stTravel) OR NOT AxisOk(stChk.stHoist) OR NOT AxisOk(stChk.stFork) THEN
+    sError := 'axis velocity / accel must be in 0..10';
+ELSIF stChk.stInfeed.lrLength <= 0.0 OR stChk.stInfeed.lrSpeed <= 0.0 OR stChk.stInfeed.lrJamTimeout <= 0.0
+   OR stChk.stOutfeed.lrLength <= 0.0 OR stChk.stOutfeed.lrSpeed <= 0.0 OR stChk.stOutfeed.lrJamTimeout <= 0.0 THEN
+    sError := 'conveyor length / speed / jamTimeout must be > 0';
+ELSIF stChk.lrAckTimeout <= 0.0 THEN
+    sError := 'mfr.ackTimeout must be > 0';
+ELSIF stChk.nMfrPort = 0 THEN
+    sError := 'mfr.port must be 1..65535';
+ELSIF stChk.stLayout.nType < 1 OR stChk.stLayout.nType > 4 OR stChk.stLayout.nLeId < 1 OR stChk.stLayout.nLeId > 20
+   OR NOT WidthOk(stChk.stLayout.nSeq) OR NOT WidthOk(stChk.stLayout.nOrder) OR NOT WidthOk(stChk.stLayout.nSide)
+   OR NOT WidthOk(stChk.stLayout.nColumn) OR NOT WidthOk(stChk.stLayout.nLevel) OR NOT WidthOk(stChk.stLayout.nStatus) THEN
+    sError := 'mfr.layout: type 1..4, leId 1..20, numbers 1..9 characters';
+ELSE
+    Validate := TRUE;
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="AxisOk" Id="{196e089b-7ccb-dd7c-771f-256f40424ed0}">
+      <Declaration><![CDATA[METHOD PRIVATE AxisOk : BOOL
+VAR_INPUT
+    stChk : ST_AxisConfig;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[AxisOk := stChk.lrVelocity > 0.0 AND stChk.lrVelocity <= 10.0 AND stChk.lrAccel > 0.0 AND stChk.lrAccel <= 10.0;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="WidthOk" Id="{33fee44f-6b6f-6b2a-fce8-c9383fd0126f}">
+      <Declaration><![CDATA[// A number field fits a DINT with 1..9 digits.
+METHOD PRIVATE WidthOk : BOOL
+VAR_INPUT
+    nWidth : INT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[WidthOk := nWidth >= 1 AND nWidth <= 9;]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

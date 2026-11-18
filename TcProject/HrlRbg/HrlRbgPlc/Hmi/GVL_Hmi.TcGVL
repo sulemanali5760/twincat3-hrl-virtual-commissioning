@@ -1,0 +1,14 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <GVL Name="GVL_Hmi" Id="{56ec23f2-91ad-16cb-49e7-68d04d488fac}">
+    <Declaration><![CDATA[// The only PLC data the HMI uses. Both structs are mapped automatically into
+// the TwinCAT HMI server (attribute TcHmiSymbol.AddSymbol).
+{attribute 'qualified_only'}
+VAR_GLOBAL
+    {attribute 'TcHmiSymbol.AddSymbol'}
+    stStatus  : ST_HmiStatus;
+    {attribute 'TcHmiSymbol.AddSymbol'}
+    stCommand : ST_HmiCommand;
+END_VAR]]></Declaration>
+  </GVL>
+</TcPlcObject>

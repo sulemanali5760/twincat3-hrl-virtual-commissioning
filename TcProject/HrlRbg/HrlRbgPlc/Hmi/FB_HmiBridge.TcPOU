@@ -1,0 +1,105 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_HmiBridge" Id="{a91a91fc-9d8b-8373-f20d-64aa9e3e9a01}" SpecialFunc="None">
+    <Declaration><![CDATA[// FB_HmiBridge - copies the plant state into ST_HmiStatus and applies
+// ST_HmiCommand to the plant. The HMI only ever sees these two structs.
+// Commands that trigger an action act on the rising edge.
+FUNCTION_BLOCK FB_HmiBridge
+VAR_OUTPUT
+    eModeRequest : E_OpMode := E_OpMode.eAutomatic;   // for MAIN's mode handler
+END_VAR
+VAR
+    fbTeachStart   : R_TRIG;
+    fbTeachConfirm : R_TRIG;
+    fbResetFault   : R_TRIG;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name="Run" Id="{29008187-6fe9-0223-3a02-c741872dc430}">
+      <Declaration><![CDATA[METHOD PUBLIC Run
+VAR_IN_OUT
+    fbPlant  : FB_Hrl;
+    fbEmu    : FB_MfrEmulator;
+    stCmd    : ST_HmiCommand;
+    stStat   : ST_HmiStatus;
+END_VAR
+VAR_INPUT
+    eModeNow : E_OpMode;
+END_VAR
+VAR
+    stAddr : ST_SlotAddr;
+    i, nShown : INT;
+    eJog : E_JogAxis;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[// ---- HMI -> PLC
+IF stCmd.bModeStop THEN            // stop wins if several are pressed
+    eModeRequest := E_OpMode.eStop;
+ELSIF stCmd.bModeManual THEN
+    eModeRequest := E_OpMode.eManual;
+ELSIF stCmd.bModeHoming THEN
+    eModeRequest := E_OpMode.eHoming;
+ELSIF stCmd.bModeAuto THEN
+    eModeRequest := E_OpMode.eAutomatic;
+END_IF
+CASE stCmd.nJogAxis OF
+    1: eJog := E_JogAxis.eHoist;
+    2: eJog := E_JogAxis.eFork;
+ELSE
+    eJog := E_JogAxis.eTravel;
+END_CASE
+fbPlant.Jog(eJog, stCmd.bJogFwd, stCmd.bJogBwd);
+fbPlant.bSafetyReset  := stCmd.bSafetyReset;
+fbTeachStart(CLK := stCmd.bTeachStart);
+IF fbTeachStart.Q THEN
+    stAddr.nSide   := stCmd.nTeachSide;
+    stAddr.nColumn := stCmd.nTeachColumn;
+    stAddr.nLevel  := stCmd.nTeachLevel;
+    fbPlant.fbTeach.Start(stAddr);
+END_IF
+fbTeachConfirm(CLK := stCmd.bTeachConfirm);
+IF fbTeachConfirm.Q THEN
+    fbPlant.fbTeach.Confirm();
+END_IF
+fbResetFault(CLK := stCmd.bResetFault);
+IF fbResetFault.Q THEN
+    fbPlant.fbSrm.ResetFault();
+END_IF
+
+// ---- PLC -> HMI
+stStat.nMode         := TO_INT(eModeNow);
+stStat.bSafetyOk     := fbPlant.bSafetyOk;
+stStat.lrTravelPos   := fbPlant.fbSrm.TravelPos;
+stStat.lrHoistPos    := fbPlant.fbSrm.HoistPos;
+stStat.lrForkPos     := fbPlant.fbSrm.ForkActPos;
+stStat.bBusy         := fbPlant.fbSrm.bBusy;
+stStat.bFault        := fbPlant.fbSrm.bFault;
+stStat.bJogBlocked   := fbPlant.fbSrm.bJogBlocked;
+stStat.sLeOnFork     := fbPlant.fbSrm.sLeOnFork;
+stStat.nJobsDone     := fbPlant.fbSrm.nJobsDone;
+stStat.nStored       := fbEmu.nStored;
+stStat.nRetrieved    := fbEmu.nRetrieved;
+stStat.bMfrConnected := fbPlant.fbMfrTcp.bConnected;
+stStat.nActiveFaults := fbPlant.fbDiag.nActive;
+stStat.bTeachActive  := fbPlant.fbTeach.bActive;
+stStat.nTaught       := fbPlant.fbTeach.nTaught;
+stStat.bTeachRejected := fbPlant.fbTeach.bLastRejected;
+stStat.sConfigError  := fbPlant.sConfigError;
+stStat.sFault1 := ''; stStat.sFault2 := ''; stStat.sFault3 := ''; stStat.sFault4 := '';
+nShown := 0;
+FOR i := 1 TO 16 DO   // FB_Diag.cMaxFault
+    IF fbPlant.fbDiag.aText[i] <> '' THEN
+        nShown := nShown + 1;
+        CASE nShown OF
+            1: stStat.sFault1 := fbPlant.fbDiag.aText[i];
+            2: stStat.sFault2 := fbPlant.fbDiag.aText[i];
+            3: stStat.sFault3 := fbPlant.fbDiag.aText[i];
+            4: stStat.sFault4 := fbPlant.fbDiag.aText[i];
+        END_CASE
+    END_IF
+END_FOR]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

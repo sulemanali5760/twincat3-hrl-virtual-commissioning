@@ -1,0 +1,21 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_RackConfig" Id="{c4b94682-0c6d-54d8-ad90-c86c5216f7fd}">
+    <Declaration><![CDATA[// Rack geometry of one aisle. Defaults = the practice plant (GVL_Rack).
+// Sizes may not exceed GVL_Rack.cMaxSides / cMaxColumns / cMaxLevels.
+TYPE ST_RackConfig :
+STRUCT
+    nSides          : INT   := GVL_Rack.cSides;
+    nColumns        : INT   := GVL_Rack.cColumns;
+    nLevels         : INT   := GVL_Rack.cLevels;
+    lrPitchX        : LREAL := GVL_Rack.cPitchX;          // column pitch incl. upright [m]
+    lrPitchY        : LREAL := GVL_Rack.cPitchY;          // level pitch [m]
+    lrOffsetX       : LREAL := GVL_Rack.cOffsetX;         // transfer station -> centre of column 1 [m]
+    lrOffsetY       : LREAL := GVL_Rack.cOffsetY;         // fork height at level 1 / station [m]
+    lrForkStroke    : LREAL := GVL_Rack.cForkStroke;      // [m]
+    lrLiftStroke    : LREAL := GVL_Rack.cLiftStroke;      // [m]
+    lrTeachTolerance: LREAL := GVL_Rack.cTeachTolerance;  // [m]
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

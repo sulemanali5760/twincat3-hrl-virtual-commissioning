@@ -1,0 +1,91 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_SafetyInterface_Test" Id="{697534ab-0f09-7687-7d4e-40ebc88c65ba}" SpecialFunc="None">
+    <Declaration><![CDATA[// Tests for the standard-PLC side of the safety concept (not the safety
+// function itself): every drop disables, no restart without acknowledge,
+// door unlock only at standstill.
+FUNCTION_BLOCK FB_SafetyInterface_Test EXTENDS TcUnit.FB_TestSuite
+VAR
+    fbStart : FB_SafetyInterface;
+    fbDrop  : FB_SafetyInterface;
+    fbDoor  : FB_SafetyInterface;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[PowerUp_NeedsAcknowledgeBeforeEnable();
+EveryDrop_DisablesAndLocksUntilReset();
+DoorUnlock_OnlyAtStandstill();]]></ST>
+    </Implementation>
+    <Method Name="AllOk" Id="{521a18b9-4942-752b-a606-96e37cc83e4d}">
+      <Declaration><![CDATA[METHOD PRIVATE AllOk : ST_SafetyStatus
+VAR_INPUT
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[AllOk.bSafetyRun  := TRUE;
+AllOk.bEStopOk    := TRUE;
+AllOk.bDoorClosed := TRUE;
+AllOk.bDoorLocked := TRUE;
+AllOk.bStoOk      := TRUE;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="PowerUp_NeedsAcknowledgeBeforeEnable" Id="{461ac37f-1701-2a6a-5a33-1c1881f483c0}">
+      <Declaration><![CDATA[METHOD PRIVATE PowerUp_NeedsAcknowledgeBeforeEnable
+VAR
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('PowerUp_NeedsAcknowledgeBeforeEnable');
+fbStart(stStatus := AllOk(), bReset := FALSE);
+AssertFalse(Condition := fbStart.bDriveEnable, Message := 'no enable straight after power-up');
+fbStart(stStatus := AllOk(), bReset := TRUE);
+AssertTrue(Condition := fbStart.bDriveEnable, Message := 'enable after acknowledge');
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="EveryDrop_DisablesAndLocksUntilReset" Id="{296c7de5-d3cb-14ae-658b-063a2fec9473}">
+      <Declaration><![CDATA[METHOD PRIVATE EveryDrop_DisablesAndLocksUntilReset
+VAR
+    stSt : ST_SafetyStatus;
+    i : INT;
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('EveryDrop_DisablesAndLocksUntilReset');
+fbDrop(stStatus := AllOk(), bReset := TRUE);   // running
+fbDrop(stStatus := AllOk(), bReset := FALSE);
+FOR i := 1 TO 5 DO
+    stSt := AllOk();
+    CASE i OF
+        1: stSt.bSafetyRun  := FALSE;
+        2: stSt.bEStopOk    := FALSE;
+        3: stSt.bDoorClosed := FALSE;
+        4: stSt.bDoorLocked := FALSE;
+        5: stSt.bStoOk      := FALSE;
+    END_CASE
+    fbDrop(stStatus := stSt, bReset := FALSE);
+    AssertFalse(Condition := fbDrop.bDriveEnable, Message := 'a dropped bit disables');
+    fbDrop(stStatus := AllOk(), bReset := FALSE);
+    AssertFalse(Condition := fbDrop.bDriveEnable, Message := 'bit back: still locked, no automatic restart');
+    AssertTrue(Condition := fbDrop.bRestartLock, Message := 'restart lock set');
+    fbDrop(stStatus := stSt, bReset := TRUE);
+    AssertFalse(Condition := fbDrop.bDriveEnable, Message := 'reset while still dropped does nothing');
+    fbDrop(stStatus := AllOk(), bReset := FALSE);
+    fbDrop(stStatus := AllOk(), bReset := TRUE);
+    AssertTrue(Condition := fbDrop.bDriveEnable, Message := 'reset with all OK enables');
+    fbDrop(stStatus := AllOk(), bReset := FALSE);
+END_FOR
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="DoorUnlock_OnlyAtStandstill" Id="{66e69a20-3d43-54aa-465e-aced7c12c062}">
+      <Declaration><![CDATA[METHOD PRIVATE DoorUnlock_OnlyAtStandstill
+VAR
+END_VAR]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[TEST('DoorUnlock_OnlyAtStandstill');
+fbDoor(stStatus := AllOk(), bDoorRequest := TRUE, bStandstill := FALSE);
+AssertFalse(Condition := fbDoor.bDoorUnlockReq, Message := 'no unlock while the RBG moves');
+fbDoor(stStatus := AllOk(), bDoorRequest := TRUE, bStandstill := TRUE);
+AssertTrue(Condition := fbDoor.bDoorUnlockReq, Message := 'unlock request at standstill');
+TEST_FINISHED();]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>
